@@ -7,7 +7,7 @@
 use nomad_proto::ids::NodeId;
 
 /// A candidate machine, as far as placement cares.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NodeView {
     pub node_id: NodeId,
     /// Reachable right now.

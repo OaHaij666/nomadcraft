@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 nomad-proto = { path = "../../crates/nomad-proto" }
+nomad-snapshot = { path = "../../crates/nomad-snapshot" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -22,3 +23,11 @@ tracing-subscriber.workspace = true
 clap.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+axum = "0.8"
+tower = "0.5"
+
+[dev-dependencies]
+tempfile.workspace = true
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+

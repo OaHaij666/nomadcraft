@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use nomad_proto::epoch::Epoch;
-use nomad_proto::ids::{NodeId, ServerId, SnapshotId};
+use nomad_proto::ids::{NodeId, RoomId, ServerId, SnapshotId};
 use nomad_proto::room::{Lease, LeaseRole};
 
 use crate::scheduler::{place_with_preference, NodeView};
@@ -82,6 +82,8 @@ pub enum EngineError {
     HostBusy { held: u64 },
     #[error("no eligible host is available")]
     NoCandidate,
+    #[error("unknown server: {0}")]
+    UnknownServer(String),
     #[error("epoch {got} is stale (current {current})")]
     StaleEpoch { got: u64, current: u64 },
     #[error("snapshot {0} is not known to this room")]
@@ -98,19 +100,20 @@ pub struct Tick {
 }
 
 /// One server's live state inside the engine.
-#[derive(Debug, Clone)]
-struct ServerRecord {
-    epoch: Epoch,
-    lease: Option<Lease>,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServerRecord {
+    pub room_id: RoomId,
+    pub epoch: Epoch,
+    pub lease: Option<Lease>,
     /// Highest snapshot the room considers safe to restore from.
-    committed: Option<SnapshotId>,
+    pub committed: Option<SnapshotId>,
 }
 
 /// A node's live state inside the engine.
-#[derive(Debug, Clone)]
-struct NodeRecord {
-    view: NodeView,
-    public_key: String,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NodeRecord {
+    pub view: NodeView,
+    pub public_key: String,
 }
 
 /// Decides who hosts. Holds all room state in memory; a durable store can be
@@ -153,10 +156,13 @@ impl<C: Clock> Engine<C> {
     }
 
     /// Ensure a server record exists, starting at epoch 0 (never hosted).
-    pub fn ensure_server(&mut self, server_id: &ServerId) {
+    ///
+    /// The room is recorded here so a lease always names the room it belongs to.
+    pub fn ensure_server(&mut self, server_id: &ServerId, room_id: &RoomId) {
         self.servers
             .entry(server_id.clone())
-            .or_insert(ServerRecord {
+            .or_insert_with(|| ServerRecord {
+                room_id: room_id.clone(),
                 epoch: Epoch::ZERO,
                 lease: None,
                 committed: None,
@@ -175,6 +181,46 @@ impl<C: Clock> Engine<C> {
             .ok_or(EngineError::UnknownSnapshot(snapshot.as_str().to_string()))?;
         rec.committed = Some(snapshot);
         Ok(())
+    }
+
+    /// Clone every server record (for persistence).
+    pub(crate) fn servers_snapshot(&self) -> HashMap<ServerId, ServerRecord> {
+        self.servers.clone()
+    }
+
+    /// Clone every node record (for persistence).
+    pub(crate) fn nodes_snapshot(&self) -> HashMap<NodeId, NodeRecord> {
+        self.nodes.clone()
+    }
+
+    /// Replace all state (for restoring from persistence).
+    pub(crate) fn set_state(
+        &mut self,
+        servers: HashMap<ServerId, ServerRecord>,
+        nodes: HashMap<NodeId, NodeRecord>,
+    ) {
+        self.servers = servers;
+        self.nodes = nodes;
+    }
+
+    /// The room a server belongs to.
+    pub fn room_of(&self, server_id: &ServerId) -> Option<&RoomId> {
+        self.servers.get(server_id).map(|s| &s.room_id)
+    }
+
+    /// Every server known to the engine.
+    pub fn server_ids(&self) -> Vec<ServerId> {
+        self.servers.keys().cloned().collect()
+    }
+
+    /// Every node known to the engine, with its record.
+    pub fn nodes(&self) -> impl Iterator<Item = (&NodeId, &NodeRecord)> {
+        self.nodes.iter()
+    }
+
+    /// Look up a single node.
+    pub fn node(&self, node_id: &NodeId) -> Option<&NodeRecord> {
+        self.nodes.get(node_id)
     }
 
     /// The current epoch for a server (0 when never hosted).
@@ -249,7 +295,9 @@ impl<C: Clock> Engine<C> {
         server_id: &ServerId,
         requested: Option<&NodeId>,
     ) -> Result<Lease, EngineError> {
-        self.ensure_server(server_id);
+        if !self.servers.contains_key(server_id) {
+            return Err(EngineError::UnknownServer(server_id.to_string()));
+        }
         let now = self.clock.now_unix_ms();
         let lease_ms = self.lease_ms;
 
@@ -280,11 +328,14 @@ impl<C: Clock> Engine<C> {
         let views = self.node_views();
         let pick = place_with_preference(&views, requested).ok_or(EngineError::NoCandidate)?;
 
-        let rec = self.servers.get_mut(server_id).expect("ensured above");
+        let rec = self
+            .servers
+            .get_mut(server_id)
+            .expect("exists: ensure_server first");
         rec.epoch = rec.epoch.next();
         let lease = Lease {
             server_id: server_id.clone(),
-            room_id: nomad_proto::ids::RoomId::generate(),
+            room_id: rec.room_id.clone(),
             node_id: pick.node_id,
             role: LeaseRole::Host,
             epoch: rec.epoch,
@@ -419,7 +470,8 @@ mod tests {
         e.upsert_node(nv("node_a", 4), "pk_a");
         e.upsert_node(nv("node_b", 16), "pk_b");
         let srv = ServerId::generate();
-        e.ensure_server(&srv);
+        let room = RoomId::generate();
+        e.ensure_server(&srv, &room);
         (e, srv)
     }
 
@@ -573,7 +625,7 @@ mod tests {
         e.upsert_node(nv("node_a", 4), "pk");
         e.set_node_online(&NodeId::from_raw("node_a"), false);
         let srv = ServerId::generate();
-        e.ensure_server(&srv);
+        e.ensure_server(&srv, &RoomId::generate());
         let err = e.claim(&srv, None).unwrap_err();
         assert_eq!(err, EngineError::NoCandidate);
     }

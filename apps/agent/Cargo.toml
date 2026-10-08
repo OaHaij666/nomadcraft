@@ -6,16 +6,27 @@ license.workspace = true
 repository.workspace = true
 description = "NomadCraft agent: supervises the local Minecraft server and syncs the world."
 
+[lib]
+name = "nomad_agent"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nomad-agent"
 path = "src/main.rs"
 
 [dependencies]
 nomad-proto = { path = "../../crates/nomad-proto" }
+nomad-snapshot = { path = "../../crates/nomad-snapshot" }
 anyhow.workspace = true
+thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 clap.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+nomad-control-plane = { path = "../control-plane" }
+axum = "0.8"
