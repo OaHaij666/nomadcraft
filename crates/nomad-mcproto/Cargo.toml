@@ -1,0 +1,16 @@
+[package]
+name = "nomad-mcproto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Minimal Minecraft Java handshake / status handling so the relay can act like a real server."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

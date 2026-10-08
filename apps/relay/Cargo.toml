@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 nomad-proto = { path = "../../crates/nomad-proto" }
+nomad-mcproto = { path = "../../crates/nomad-mcproto" }
 anyhow.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/nomad-proto",
     "crates/nomad-snapshot",
+    "crates/nomad-mcproto",
     "apps/control-plane",
     "apps/agent",
     "apps/relay",

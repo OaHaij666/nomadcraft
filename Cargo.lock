@@ -600,6 +600,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nomad-mcproto"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "nomad-proto"
 version = "0.1.0"
 dependencies = [
@@ -616,6 +627,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "nomad-mcproto",
  "nomad-proto",
  "thiserror",
  "tokio",
