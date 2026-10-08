@@ -12,12 +12,21 @@
 //! Chunking is content-defined (FastCDC), which means inserting a few bytes into a
 //! region file only rewrites the chunks around the edit instead of shifting every
 //! subsequent boundary — that is what makes per-checkpoint uploads affordable.
+//!
+//! The crate also carries the two pieces that turn a local store into a durable
+//! backup: the `sync` module moves only the chunks a peer is missing, and the
+//! `retention` module decides which historical versions to keep so a rollback
+//! target always exists.
 
 mod chunk;
+mod retention;
 mod store;
+mod sync;
 
 pub use chunk::{chunk_bytes, ChunkId};
+pub use retention::{RetainedSnapshot, RetentionPlan, RetentionPolicy, Tier};
 pub use store::{GcReport, RestoreReport, SnapshotInfo, SnapshotMeta, SnapshotStore, VerifyReport};
+pub use sync::{is_complete, missing_chunks_for, pull, referenced_chunks, SyncReport};
 
 /// Default target chunk size (average). Minecraft region files are a few MB, so a
 /// ~1 MiB average keeps dedup useful without producing millions of tiny chunks.

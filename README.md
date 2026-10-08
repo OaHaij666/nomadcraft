@@ -36,12 +36,12 @@ This repository is being built in the open, bottom-up. What works right now:
 | Component | Status | Notes |
 | --- | --- | --- |
 | `nomad-proto` | ✅ done | shared types: ids, epochs, leases, manifests, control messages |
-| `nomad-snapshot` | ✅ done | content-addressed, chunk-deduplicated world snapshots |
+| `nomad-snapshot` | ✅ done | content-addressed snapshots, incremental replication, retention |
 | `nomad-control-plane` | 🚧 in progress | lease engine + scheduler done and tested; HTTP API next |
 | `nomad-agent` | ⏳ planned | runs the game, syncs the world, heartbeats the control plane |
 | `nomad-relay` | ⏳ planned | stateless byte forwarding for game traffic |
 
-The safety-critical logic is finished and covered by tests: **47 tests, all
+The safety-critical logic is finished and covered by tests: **58 tests, all
 passing.** That includes the rules that keep two machines from ever writing the
 same world at once.
 
@@ -56,7 +56,11 @@ same world at once.
 3. **Worlds are content-addressed.** A snapshot's identity is the BLAKE3 digest of
    its manifest, so manifests are immutable and every chunk is verified on read.
    Splitting is content-defined, so a small edit only uploads the chunks around it.
-4. **Peers connect outbound.** Machines dial out and hold a connection open, so
+4. **Durable by default.** A running host periodically pushes the latest save to
+   other machines, transferring only the chunks that changed. Retention keeps a
+   recent good version, a nightly history, and every manual checkpoint, so a crash
+   costs minutes rather than a world.
+5. **Peers connect outbound.** Machines dial out and hold a connection open, so
    NAT and the absence of a public IP are non-issues.
 
 ## Repository layout

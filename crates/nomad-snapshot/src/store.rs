@@ -288,6 +288,34 @@ impl SnapshotStore {
         Ok(ids)
     }
 
+    /// True when this store already holds a chunk.
+    pub fn has_chunk(&self, id: &ChunkId) -> bool {
+        self.chunk_path(id).exists()
+    }
+
+    /// Read a chunk in its compressed transfer form (zstd bytes).
+    ///
+    /// The payload is verified before it leaves, so a peer never receives corrupt
+    /// bytes from a store that has already detected damage.
+    pub fn chunk_compressed(&self, id: &ChunkId) -> anyhow::Result<Vec<u8>> {
+        // Round-trip through get_chunk so verification always happens first.
+        let plain = self.get_chunk(id)?;
+        Ok(zstd::encode_all(&plain[..], crate::DEFAULT_ZSTD_LEVEL)?)
+    }
+
+    /// Store a chunk received from a peer, verifying its plaintext hash first.
+    ///
+    /// Returns `true` when the chunk was new. A chunk that fails verification is
+    /// rejected and never written, so a malicious or broken peer cannot poison the
+    /// store.
+    pub fn import_chunk(&self, expected: &ChunkId, compressed: &[u8]) -> anyhow::Result<bool> {
+        let plain = zstd::decode_all(compressed)?;
+        if ChunkId::of(&plain) != *expected {
+            anyhow::bail!("received chunk {} failed verification", expected);
+        }
+        self.put_chunk(expected, &plain)
+    }
+
     /// Chunk ids a snapshot needs that this store does not yet have.
     pub fn missing_chunks(&self, manifest: &Manifest) -> Vec<String> {
         let mut missing = BTreeSet::new();
