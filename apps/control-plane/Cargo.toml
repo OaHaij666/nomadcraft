@@ -1,0 +1,24 @@
+[package]
+name = "nomad-control-plane"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NomadCraft control plane: rooms, leases, scheduling, world store."
+
+[[bin]]
+name = "nomad-control-plane"
+path = "src/main.rs"
+
+[dependencies]
+nomad-proto = { path = "../../crates/nomad-proto" }
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+uuid.workspace = true
+chrono.workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "nomad-snapshot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Content-addressed, chunk-deduplicated world snapshots for NomadCraft."
+
+[dependencies]
+nomad-proto = { path = "../nomad-proto" }
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+fastcdc.workspace = true
+zstd.workspace = true
+walkdir.workspace = true
+hex.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
