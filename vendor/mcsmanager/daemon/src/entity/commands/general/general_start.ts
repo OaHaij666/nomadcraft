@@ -9,6 +9,7 @@ import Instance from "../../instance/instance";
 import { IInstanceProcess } from "../../instance/interface";
 import { commandStringToArray } from "../base/command_parser";
 import AbsStartCommand from "../start";
+import { HostingSession, settingsForInstance } from "../../../service/nomad";
 
 // Error exception at startup
 class StartupError extends Error {
@@ -79,6 +80,30 @@ export default class GeneralStartCommand extends AbsStartCommand {
       throw new StartupError($t("TXT_CODE_general_start.cmdEmpty"));
     }
 
+    // ── NomadCraft coordination ───────────────────────────────────────────────
+    //
+    // Before a single byte of game runs, this machine must hold the lease for this
+    // world and its working directory must be the committed world. Only the lease
+    // holder is allowed to open the save; anyone else is refused rather than allowed
+    // to fork the world.
+    const settings = settingsForInstance(instance.instanceUuid, instance.config);
+    const session = new HostingSession(settings, {
+      onProgress: (message) => instance.println("INFO", message)
+    });
+
+    if (settings.enabled) {
+      const outcome = await session.begin(instance.absoluteCwdPath());
+      if (outcome.kind === "busy") {
+        throw new StartupError(
+          "另一个玩家正在运行这个世界；请先让对方停止，或等待租约到期后再试。"
+        );
+      }
+      if (outcome.kind === "granted") {
+        session.bind(instance.absoluteCwdPath(), outcome.epoch);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     const runAsConfig = await getRunAsUserParams(instance);
 
     logger.info("----------------");
@@ -116,11 +141,22 @@ export default class GeneralStartCommand extends AbsStartCommand {
           commandParameters: JSON.stringify(commandParameters)
         })
       );
+      // The lease was won but the game never launched; hand it straight back so
+      // another machine can recover instead of waiting for the lease to expire.
+      await session.finish();
       throw new StartupError($t("TXT_CODE_general_start.startErr"));
     }
 
     // create process adapter
     const processAdapter = new ProcessAdapter(subProcess);
+
+    // The relay slot and the checkpoint cadence begin only once the process exists.
+    if (settings.enabled) {
+      session.serve();
+      subProcess.once("exit", () => {
+        void session.finish();
+      });
+    }
 
     // generate open event
     instance.started(processAdapter);

@@ -655,6 +655,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nomad-snapshot-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "nomad-proto",
+ "nomad-snapshot",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
