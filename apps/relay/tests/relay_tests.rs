@@ -22,6 +22,7 @@ fn route(host: &str) -> RoomRoute {
         version_name: "1.21.4".into(),
         max_players: 20,
         registry: Registry::new(),
+        door: None,
     }
 }
 
@@ -273,4 +274,207 @@ async fn slot_for_the_wrong_host_is_rejected() {
     let mut buf = Vec::new();
     let _ = tokio::time::timeout(Duration::from_secs(5), client.read_to_end(&mut buf)).await;
     assert!(String::from_utf8_lossy(&buf).contains("ERR"));
+}
+
+/// A host that takes over a room must evict the previous host's warm slots.
+///
+/// Otherwise a player could land in a socket that leads to the old, now-unauthoritative
+/// world and play a fork. The first slot from a new host generation clears the old
+/// generation entirely.
+#[tokio::test]
+async fn a_new_host_evicts_the_previous_hosts_slots() {
+    let routes = routes(&["friends.example.com"]);
+    let registry = routes[&"friends.example.com".to_string()].registry.clone();
+
+    let old = park_slots(&registry, "epoch-1", 2).await;
+    assert_eq!(registry.available().await, 2);
+    assert_eq!(registry.owner().await.as_deref(), Some("epoch-1"));
+
+    let evicted = {
+        let (slot, _client) = connected_pair().await;
+        registry.park(slot, "epoch-2").await
+    };
+
+    assert_eq!(evicted, 2, "both old-generation slots must be dropped");
+    assert_eq!(registry.available().await, 1, "only the new host remains");
+    assert_eq!(registry.owner().await.as_deref(), Some("epoch-2"));
+
+    // Keep the old peer sockets alive until the assertions are done.
+    drop(old);
+}
+
+/// Park `count` slots for a host token, returning the client-side peers so they stay
+/// open for the duration of the test.
+async fn park_slots(registry: &Arc<Registry>, token: &str, count: usize) -> Vec<TcpStream> {
+    let mut peers = Vec::new();
+    for _ in 0..count {
+        let (slot, client) = connected_pair().await;
+        registry.park(slot, token).await;
+        peers.push(client);
+    }
+    peers
+}
+
+/// A connected TCP pair: returns `(server_side, client_side)`.
+async fn connected_pair() -> (TcpStream, TcpStream) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (accepted, client) = tokio::join!(
+        async {
+            let (s, _) = listener.accept().await.unwrap();
+            s
+        },
+        async { TcpStream::connect(addr).await.unwrap() }
+    );
+    (accepted, client)
+}
+
+#[test]
+fn player_names_are_read_from_the_first_hostname_label() {
+    assert_eq!(
+        nomad_relay::split_player_room("alex.friends.example.com"),
+        Some(("alex".into(), "friends.example.com".into()))
+    );
+    // Case is normalized, so two spellings of the same name are the same player.
+    assert_eq!(
+        nomad_relay::split_player_room("ALEX.Friends.Example.Com"),
+        Some(("alex".into(), "friends.example.com".into()))
+    );
+    // A bare multi-label host splits too, but the caller only treats it as a player
+    // when the remainder is a known room (see `serve_player`). Document that here so
+    // the two halves stay honest about their contract.
+    assert_eq!(
+        nomad_relay::split_player_room("friends.example.com"),
+        Some(("friends".into(), "example.com".into()))
+    );
+    // A single label has no dot, so there is no player to extract.
+    assert_eq!(nomad_relay::split_player_room("localhost"), None);
+}
+
+/// A tiny stand-in for the control plane's `/admit` endpoint.
+async fn fake_door(allowed: &'static [&'static str]) -> std::net::SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                // The player name is the JSON value; a crude but sufficient parse.
+                let allowed_here = allowed.iter().any(|p| req.contains(&format!("{p}\"")));
+                let body = if allowed_here {
+                    "{\"admitted\":true}"
+                } else {
+                    "{}"
+                };
+                let status = if allowed_here {
+                    "200 OK"
+                } else {
+                    "403 Forbidden"
+                };
+                let resp = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = sock.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    addr
+}
+
+#[tokio::test]
+async fn a_door_refuses_a_player_it_does_not_know() {
+    let door_addr = fake_door(&["alex"]).await;
+    let mut r = route("friends.example.com");
+    r.door = Some(nomad_relay::Door::new(format!("http://{door_addr}")));
+    let routes: Arc<HashMap<String, RoomRoute>> = Arc::new(
+        [("friends.example.com".to_string(), r)]
+            .into_iter()
+            .collect(),
+    );
+
+    // mallory is not on the list: the relay must refuse before looking for a host.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let public = listener.local_addr().unwrap();
+    let rs = routes.clone();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let _ = nomad_relay::serve_player(stream, rs).await;
+    });
+
+    let mut client = TcpStream::connect(public).await.unwrap();
+    client
+        .write_all(&handshake("mallory.friends.example.com", 2))
+        .await
+        .unwrap();
+    let mut buf = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(5), client.read_to_end(&mut buf)).await;
+    let text = String::from_utf8_lossy(&buf);
+    assert!(
+        text.contains("join the room"),
+        "expected a door refusal, got: {text}"
+    );
+}
+
+#[tokio::test]
+async fn a_door_admits_a_listed_player_and_then_routes() {
+    let door_addr = fake_door(&["alex"]).await;
+    let game = fake_game_server().await;
+
+    let mut r = route("friends.example.com");
+    r.door = Some(nomad_relay::Door::new(format!("http://{door_addr}")));
+    let routes: Arc<HashMap<String, RoomRoute>> = Arc::new(
+        [("friends.example.com".to_string(), r)]
+            .into_iter()
+            .collect(),
+    );
+
+    // Park a host slot for the room.
+    let tunnel = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let tunnel_addr = tunnel.local_addr().unwrap();
+    let rs_tunnel = routes.clone();
+    tokio::spawn(async move {
+        let (stream, _) = tunnel.accept().await.unwrap();
+        let _ = nomad_relay::handle_slot_for_test(stream, rs_tunnel).await;
+    });
+    connect_host(tunnel_addr, "friends.example.com", game).await;
+    for _ in 0..200 {
+        if routes[&"friends.example.com".to_string()]
+            .registry
+            .available()
+            .await
+            > 0
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let public = listener.local_addr().unwrap();
+    let rs = routes.clone();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let _ = nomad_relay::serve_player(stream, rs).await;
+    });
+
+    let mut client = TcpStream::connect(public).await.unwrap();
+    // alex is admitted by the door, then spliced to the host.
+    client
+        .write_all(&handshake("alex.friends.example.com", 2))
+        .await
+        .unwrap();
+    client.write_all(b"hello-through-door").await.unwrap();
+
+    let mut buf = vec![0u8; "hello-through-door".len()];
+    tokio::time::timeout(Duration::from_secs(5), client.read_exact(&mut buf))
+        .await
+        .expect("admitted player must reach the host")
+        .unwrap();
+    assert_eq!(&buf, b"hello-through-door");
 }

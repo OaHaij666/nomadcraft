@@ -107,6 +107,48 @@ pub fn is_complete(store: &SnapshotStore, snapshot: &SnapshotId) -> anyhow::Resu
     Ok(missing_chunks_for(store, &manifest).is_empty())
 }
 
+/// True when `candidate` descends from `ancestor` through the parent chain.
+///
+/// This is the anti-fork check: a host that was handed the committed world may
+/// commit a descendant, and nothing else. A snapshot built from a stale copy would
+/// not chain back to the current world, so it is refused rather than silently
+/// replacing everyone else's progress.
+///
+/// A snapshot is considered to descend from itself. Missing parents end the walk
+/// and count as "not an ancestor", which fails closed.
+pub fn descends_from(
+    store: &SnapshotStore,
+    candidate: &SnapshotId,
+    ancestor: &SnapshotId,
+) -> anyhow::Result<bool> {
+    if candidate == ancestor {
+        return Ok(true);
+    }
+    let mut cursor = candidate.clone();
+    // Worlds are checkpointed on a cadence, so the chain is short in practice; the
+    // bound keeps a corrupt or cyclic manifest graph from looping forever.
+    const MAX_DEPTH: usize = 10_000;
+    for _ in 0..MAX_DEPTH {
+        let manifest = match store.manifest(&cursor) {
+            Ok(m) => m,
+            Err(_) => return Ok(false),
+        };
+        match manifest.parent {
+            Some(parent) => {
+                if parent == *ancestor {
+                    return Ok(true);
+                }
+                if parent == cursor {
+                    anyhow::bail!("snapshot {cursor} lists itself as its parent");
+                }
+                cursor = parent;
+            }
+            None => return Ok(false),
+        }
+    }
+    anyhow::bail!("snapshot ancestry chain for {candidate} exceeded {MAX_DEPTH} links")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,5 +291,71 @@ mod tests {
         all.dedup();
         assert_eq!(refs.len(), all.len());
         assert!(refs.len() <= before);
+    }
+
+    #[test]
+    fn ancestry_follows_the_parent_chain() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("src");
+        make_world(&dir, 5, 512 * 1024);
+        let store = SnapshotStore::open(tmp.path().join("store")).unwrap();
+
+        let v1 = store.snapshot(&dir, &patterns(), meta(1)).unwrap().id;
+        let v2 = store
+            .snapshot(
+                &dir,
+                &patterns(),
+                SnapshotMeta {
+                    parent: Some(v1.clone()),
+                    ..meta(2)
+                },
+            )
+            .unwrap()
+            .id;
+        let mut m3 = meta(3);
+        m3.parent = Some(v2.clone());
+        let v3 = store.snapshot(&dir, &patterns(), m3).unwrap().id;
+
+        // A snapshot descends from itself, and from every ancestor before it.
+        assert!(descends_from(&store, &v3, &v3).unwrap());
+        assert!(descends_from(&store, &v3, &v2).unwrap());
+        assert!(descends_from(&store, &v3, &v1).unwrap());
+        // ...but never from a descendant.
+        assert!(!descends_from(&store, &v1, &v3).unwrap());
+    }
+
+    #[test]
+    fn a_stale_snapshot_does_not_descend() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("src");
+        make_world(&dir, 6, 256 * 1024);
+        let store = SnapshotStore::open(tmp.path().join("store")).unwrap();
+
+        // Two snapshots from the same world, one chained and one built independently.
+        let root = store.snapshot(&dir, &patterns(), meta(1)).unwrap().id;
+        let mut chained_meta = meta(2);
+        chained_meta.parent = Some(root.clone());
+        let chained = store.snapshot(&dir, &patterns(), chained_meta).unwrap().id;
+        // Independent: no parent, so it cannot claim to continue the world.
+        let stale = store.snapshot(&dir, &patterns(), meta(3)).unwrap().id;
+
+        assert!(descends_from(&store, &chained, &root).unwrap());
+        assert!(!descends_from(&store, &stale, &root).unwrap());
+    }
+
+    #[test]
+    fn an_unknown_parent_fails_closed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("src");
+        make_world(&dir, 7, 128 * 1024);
+        let store = SnapshotStore::open(tmp.path().join("store")).unwrap();
+
+        let mut dangling = meta(4);
+        dangling.parent = Some(nomad_proto::ids::SnapshotId::from_raw("snap_missing"));
+        let orphan = store.snapshot(&dir, &patterns(), dangling).unwrap().id;
+        let root = store.snapshot(&dir, &patterns(), meta(1)).unwrap().id;
+
+        // The parent is not in the store, so the walk stops and we report "no".
+        assert!(!descends_from(&store, &orphan, &root).unwrap());
     }
 }

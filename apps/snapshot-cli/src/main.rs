@@ -24,7 +24,11 @@ use nomad_proto::manifest::PathPattern;
 use nomad_snapshot::{SnapshotMeta, SnapshotStore};
 
 #[derive(Parser, Debug)]
-#[command(name = "nomad-snapshot", version, about = "NomadCraft world snapshot engine")]
+#[command(
+    name = "nomad-snapshot",
+    version,
+    about = "NomadCraft world snapshot engine"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -81,10 +85,7 @@ enum Command {
         expect: String,
     },
     /// Verify every chunk referenced by a snapshot.
-    Verify {
-        store: PathBuf,
-        id: String,
-    },
+    Verify { store: PathBuf, id: String },
     /// List the snapshot ids in a store, newest first is not guaranteed.
     List { store: PathBuf },
 }
@@ -144,9 +145,7 @@ fn main() -> anyhow::Result<()> {
             let manifest: nomad_proto::manifest::Manifest = serde_json::from_slice(&raw)?;
             let id = store.put_manifest(&manifest)?;
             if id != expected {
-                anyhow::bail!(
-                    "manifest digest {id} does not match expected {expected}"
-                );
+                anyhow::bail!("manifest digest {id} does not match expected {expected}");
             }
             let json = serde_json::json!({ "snapshot_id": id.as_str() });
             println!("{}", serde_json::to_string(&json)?);
@@ -181,7 +180,10 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 Err(e) => {
-                    println!("{}", serde_json::json!({ "ok": false, "error": e.to_string() }));
+                    println!(
+                        "{}",
+                        serde_json::json!({ "ok": false, "error": e.to_string() })
+                    );
                     std::process::exit(2);
                 }
             }
@@ -198,8 +200,3 @@ fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
-
-
-
-
-

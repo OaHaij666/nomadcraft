@@ -22,6 +22,13 @@ export interface TunnelTarget {
   roomHost: string;
   /** `host:port` of the local Minecraft server. */
   localServer: string;
+  /**
+   * Identifies this host generation. When a new host takes over the room, the relay
+   * drops every slot that carries a different token, so players can never be spliced
+   * into a world that has been handed over. The lease epoch is exactly the right
+   * value: it changes on every handover.
+   */
+  hostToken: string;
 }
 
 /**
@@ -66,7 +73,7 @@ export function openSlot(target: TunnelTarget): Promise<void> {
     let upstream: Socket | null = null;
 
     slot.on("connect", () => {
-      slot.write(`${SLOT_HEADER_PREFIX}${target.roomHost}\n`);
+      slot.write(`${SLOT_HEADER_PREFIX}${target.roomHost} ${target.hostToken}\n`);
     });
 
     // The relay replies `OK\n` once the slot is parked; everything after that is
@@ -156,3 +163,5 @@ export class TunnelPool {
     return this.active.size;
   }
 }
+
+

@@ -23,9 +23,13 @@
 //! Line-based and telnet-debuggable:
 //!
 //! ```text
-//! host -> relay :  SLOT <hostname>\n
+//! host -> relay :  SLOT <hostname> [token]\n
 //! relay -> host :  OK\n
 //! ```
+//!
+//! The optional `token` identifies the host generation. When a new host opens its
+//! first slot, every slot from a different generation is dropped, so a player can
+//! never be spliced into a world that has been taken over (see [`Registry`]).
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -36,7 +40,22 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 
+pub mod door;
+pub use door::{Admission, Door};
+
 /// Registry for a single room's status and warm slots.
+///
+/// ## Slots belong to a host, not to a room
+///
+/// When the host of a room changes — the old host quit and a new machine took the
+/// lease — the old machine may still have warm slots parked at the relay. Those
+/// sockets lead to a world that is no longer authoritative, so a player spliced
+/// into one would be playing a fork. To prevent that, every slot carries the
+/// *host token* that opened it, and the first slot a new host parks evicts every
+/// slot belonging to any other host.
+///
+/// The token is opaque to the relay: the host chooses it (its lease epoch works
+/// well) and the relay only compares tokens for equality.
 #[derive(Default)]
 pub struct Registry {
     slots: Mutex<VecDeque<ParkedSlot>>,
@@ -45,22 +64,41 @@ pub struct Registry {
 struct ParkedSlot {
     stream: TcpStream,
     parked: Instant,
+    host: String,
 }
 
 /// How long an unused slot stays parked before being dropped.
 const SLOT_IDLE: Duration = Duration::from_secs(120);
+
+/// The host token used when a host does not announce one.
+///
+/// All such slots share a token, so they behave exactly like the pre-handover relay.
+pub const DEFAULT_HOST_TOKEN: &str = "default";
 
 impl Registry {
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
 
-    /// Park a host slot.
-    pub async fn park(&self, stream: TcpStream) {
-        self.slots.lock().await.push_back(ParkedSlot {
+    /// Park a host slot, evicting any slots that belong to a different host.
+    ///
+    /// Returning the number of evicted slots lets the caller log a handover.
+    pub async fn park(&self, stream: TcpStream, host: &str) -> usize {
+        let mut slots = self.slots.lock().await;
+        let mut evicted = 0;
+        slots.retain(|slot| {
+            let keep = slot.host == host;
+            if !keep {
+                evicted += 1;
+            }
+            keep
+        });
+        slots.push_back(ParkedSlot {
             stream,
             parked: Instant::now(),
+            host: host.to_string(),
         });
+        evicted
     }
 
     /// Take the next live slot, discarding any that sat idle too long.
@@ -78,6 +116,11 @@ impl Registry {
     pub async fn available(&self) -> usize {
         self.slots.lock().await.len()
     }
+
+    /// The host token currently owning the warm slots, if any.
+    pub async fn owner(&self) -> Option<String> {
+        self.slots.lock().await.front().map(|s| s.host.clone())
+    }
 }
 
 /// One room the relay can route to.
@@ -93,6 +136,29 @@ pub struct RoomRoute {
     pub max_players: u32,
     /// Warm host slots for this room.
     pub registry: Arc<Registry>,
+    /// Optional door: when set, a login is only admitted if the control plane says so.
+    ///
+    /// `None` means the room runs without the door (useful for a plain relay).
+    pub door: Option<Door>,
+}
+
+/// Split a hostname into the player name and the room, when the player used the
+/// `<player>.<room>` form.
+///
+/// Minecraft gives a client only the address to identify itself, so the player name
+/// is the first label and the room is everything after it. A bare room host has no
+/// player label, which is exactly why a restricted room refuses it.
+///
+/// ```text
+/// alex.friends.example.com -> Some(("alex", "friends.example.com"))
+/// friends.example.com      -> None
+/// ```
+pub fn split_player_room(hostname: &str) -> Option<(String, String)> {
+    let (player, room) = hostname.split_once('.')?;
+    if player.is_empty() || room.is_empty() {
+        return None;
+    }
+    Some((player.to_ascii_lowercase(), room.to_ascii_lowercase()))
 }
 
 /// Error types for the relay.
@@ -106,6 +172,8 @@ pub enum RelayError {
     UnknownRoom(String),
     #[error("no host is currently serving this room")]
     NoHost,
+    #[error("the door refused this connection")]
+    DoorRefused,
 }
 
 /// Read a newline-terminated header from a raw socket without over-reading.
@@ -189,10 +257,17 @@ pub async fn serve_player(
         }
     };
 
+    // A player may connect as `<player>.<room>` so the door knows who is asking, or
+    // as the bare room host (which a restricted room will refuse).
     let host = handshake.hostname();
-    let Some(route) = routes.get(&host) else {
+    let (player_name, room_host) = match split_player_room(&host) {
+        Some((name, room)) if routes.contains_key(&room) => (Some(name), room),
+        _ => (None, host.clone()),
+    };
+
+    let Some(route) = routes.get(&room_host) else {
         let _ = write_disconnect(&mut player, "未知的房间 / unknown room").await;
-        return Err(RelayError::UnknownRoom(host));
+        return Err(RelayError::UnknownRoom(room_host));
     };
 
     if handshake.intent == Intent::Status {
@@ -217,7 +292,23 @@ pub async fn serve_player(
         return Ok(());
     }
 
-    // A login: pair with a warm host slot and splice.
+    // A login: if this room has a door, the player must be admitted before we even
+    // look for a host. Failing closed means a control-plane outage refuses players
+    // rather than letting everyone through.
+    if let Some(door) = &route.door {
+        let admission = match &player_name {
+            Some(name) => door.admit(&route.room_id, name).await,
+            None => Admission::Denied,
+        };
+        if admission != Admission::Allowed {
+            tracing::info!(room = %route.room_id, ?admission, "door refused a login");
+            let _ =
+                write_disconnect(&mut player, "请先在本软件中加入房间 / join the room first").await;
+            return Err(RelayError::DoorRefused);
+        }
+    }
+
+    // Pair with a warm host slot and splice.
     let Some(mut host_conn) = route.registry.take().await else {
         let _ = write_disconnect(&mut player, "世界正在唤醒，请稍后重连 / waking up").await;
         return Err(RelayError::NoHost);
@@ -360,23 +451,39 @@ pub async fn handle_slot_for_test(
     handle_slot(stream, routes).await
 }
 
+/// Parse a `SLOT <hostname> [token]` header into its hostname and host token.
+fn parse_slot_header(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("SLOT ")?;
+    let mut parts = rest.split_whitespace();
+    let host = parts.next()?.to_ascii_lowercase();
+    if host.is_empty() {
+        return None;
+    }
+    let token = parts.next().unwrap_or(DEFAULT_HOST_TOKEN).to_string();
+    Some((host, token))
+}
+
 /// Read a host's SLOT header and park the slot on the right room.
 async fn handle_slot(
     mut stream: TcpStream,
     routes: Arc<HashMap<String, RoomRoute>>,
 ) -> Result<(), RelayError> {
     let line = read_line_raw(&mut stream, 512).await?;
-    let host = line
-        .strip_prefix("SLOT ")
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
+    let (host, token) = parse_slot_header(&line).unwrap_or_else(|| (String::new(), String::new()));
     let Some(route) = routes.get(&host) else {
         stream.write_all(b"ERR unknown room\n").await?;
         return Err(RelayError::UnknownRoom(host));
     };
     stream.write_all(b"OK\n").await?;
-    tracing::info!(room = %route.room_id, "host slot parked");
-    route.registry.park(stream).await;
+    let evicted = route.registry.park(stream, &token).await;
+    if evicted > 0 {
+        tracing::info!(
+            room = %route.room_id,
+            evicted,
+            "host changed; dropped the previous host's slots"
+        );
+    } else {
+        tracing::info!(room = %route.room_id, "host slot parked");
+    }
     Ok(())
 }

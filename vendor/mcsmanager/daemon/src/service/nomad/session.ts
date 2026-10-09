@@ -138,7 +138,10 @@ export class HostingSession {
         {
           relayTunnel: this.settings.relayTunnel,
           roomHost: this.settings.roomHost,
-          localServer: "127.0.0.1:25565"
+          localServer: "127.0.0.1:25565",
+          // The epoch is this host generation: the relay drops any slot that carries
+          // a different one, so a stale host can never serve players after handover.
+          hostToken: String(this.lastEpoch)
         },
         Math.max(1, this.settings.tunnelSlots)
       );
@@ -236,3 +239,4 @@ export class HostingSession {
     }
   }
 }
+

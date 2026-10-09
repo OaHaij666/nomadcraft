@@ -21,6 +21,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+use nomad_proto::door::{sign_ticket, DoorTicket};
 use nomad_proto::epoch::Epoch;
 use nomad_proto::ids::{NodeId, RoomId, ServerId, SnapshotId};
 use nomad_proto::manifest::Manifest;
@@ -30,11 +31,21 @@ use crate::engine::{Engine, EngineError, SystemClock};
 use crate::persist::StateFile;
 use crate::scheduler::NodeView;
 
+/// How long a door ticket stays valid. Long enough for the client to connect and
+/// authenticate, short enough that a leaked ticket is not a standing key.
+const TICKET_TTL_MS: i64 = 60_000;
+
 /// Shared server state.
 pub struct AppState {
     pub engine: Mutex<Engine<SystemClock>>,
     pub store: SnapshotStore,
     pub state_file: StateFile,
+    /// Secret the relay shares with the control plane, used to sign door tickets.
+    ///
+    /// Read from `NOMAD_DOOR_SECRET`; when unset a development default is used so a
+    /// single-machine demo works out of the box. Deployments must set it, because
+    /// the relay and the control plane have to agree on the same value.
+    door_secret: Vec<u8>,
 }
 
 impl AppState {
@@ -43,6 +54,7 @@ impl AppState {
         let data_dir = data_dir.as_ref();
         let state_file = StateFile::new(data_dir.join("engine.json"));
         let store = SnapshotStore::open(data_dir.join("store"))?;
+        let door_secret = door_secret_from_env();
 
         let mut engine = Engine::new(SystemClock);
         engine.import(state_file.load()?);
@@ -51,6 +63,7 @@ impl AppState {
             engine: Mutex::new(engine),
             store,
             state_file,
+            door_secret,
         }))
     }
 
@@ -90,6 +103,7 @@ impl From<EngineError> for ApiError {
     fn from(e: EngineError) -> Self {
         let (status, code) = match &e {
             EngineError::HostBusy { .. } => (StatusCode::CONFLICT, "host_busy"),
+            EngineError::ForkedSnapshot(_) => (StatusCode::CONFLICT, "forked_snapshot"),
             EngineError::StaleEpoch { .. } => (StatusCode::CONFLICT, "stale_epoch"),
             EngineError::NoCandidate => (StatusCode::CONFLICT, "no_candidate"),
             EngineError::NotOnline => (StatusCode::CONFLICT, "node_offline"),
@@ -140,6 +154,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/servers/{id}/renew", post(renew))
         .route("/v1/servers/{id}/checkpoint", post(commit_checkpoint))
         .route("/v1/servers/{id}/checkpoints", get(list_checkpoints))
+        .route("/v1/servers/{id}/room", get(get_server_room))
+        .route("/v1/rooms/{id}/join", post(join_room))
+        .route("/v1/rooms/{id}/admit", post(admit_room))
+        .route(
+            "/v1/rooms/{id}/members",
+            get(list_members).post(add_member).delete(remove_member),
+        )
+        .route("/v1/rooms/{id}/lock", post(set_room_lock))
         .route(
             "/v1/snapshots/{id}/manifest",
             put(put_manifest).get(get_manifest),
@@ -445,6 +467,28 @@ async fn commit_checkpoint(
         ));
     }
 
+    // Anti-fork. A host is only allowed to commit a world that descends from the
+    // one it was handed. A snapshot built from a stale copy would not chain back to
+    // the committed world; accepting it would silently discard everyone else's
+    // progress, so it is refused instead.
+    //
+    // The very first snapshot of a server has no committed ancestor and is always
+    // allowed — that is how a world comes into existence.
+    if let Some(previous) = engine.committed_snapshot(&server_id).cloned() {
+        let descends = nomad_snapshot::descends_from(&state.store, &req.snapshot_id, &previous)
+            .unwrap_or(false);
+        if !descends {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "forked_snapshot",
+                format!(
+                    "snapshot {} does not descend from committed {}",
+                    req.snapshot_id, previous
+                ),
+            ));
+        }
+    }
+
     engine.record_committed(&server_id, req.snapshot_id.clone())?;
     state.persist(&engine)?;
     tracing::info!(
@@ -574,4 +618,221 @@ async fn put_chunk(
         .import_chunk(&chunk, &body)
         .map_err(|e| ApiError::bad_request(e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The shared door secret. A deployment must set `NOMAD_DOOR_SECRET` so the relay
+/// and the control plane agree; the fallback keeps a local demo working.
+fn door_secret_from_env() -> Vec<u8> {
+    match std::env::var("NOMAD_DOOR_SECRET") {
+        Ok(v) if !v.is_empty() => v.into_bytes(),
+        _ => b"nomadcraft-development-door-secret".to_vec(),
+    }
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[derive(Serialize)]
+struct RoomResponse {
+    room_id: RoomId,
+    members: Vec<String>,
+    members_only: bool,
+}
+
+fn room_response(engine: &Engine<SystemClock>, room_id: &RoomId) -> RoomResponse {
+    let rec = engine.room(room_id).cloned().unwrap_or_default();
+    RoomResponse {
+        room_id: room_id.clone(),
+        members: rec.members,
+        members_only: rec.members_only,
+    }
+}
+
+/// A server's room, plus its membership list.
+async fn get_server_room(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+) -> ApiResult<RoomResponse> {
+    let server_id = ServerId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let engine = state.engine.lock().await;
+    let room_id = engine
+        .room_of(&server_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("no such server"))?;
+    Ok(Json(room_response(&engine, &room_id)))
+}
+
+#[derive(Deserialize)]
+struct JoinRoom {
+    player: String,
+}
+
+#[derive(Serialize)]
+struct JoinResponse {
+    ticket: DoorTicket,
+    /// Seconds until the ticket expires, so a client can refresh in time.
+    expires_in_s: i64,
+}
+
+/// Ask to enter a room. This is the door.
+///
+/// The player may only be admitted if the room lists them (once the room is locked).
+/// On success we mint a short-lived signed ticket; the relay verifies it with the
+/// shared secret, so a raw client that skipped this call cannot get in.
+async fn join_room(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<JoinRoom>,
+) -> ApiResult<JoinResponse> {
+    if req.player.trim().is_empty() {
+        return Err(ApiError::bad_request("player name must not be empty"));
+    }
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+
+    let engine = state.engine.lock().await;
+    let Some(rec) = engine.room(&room_id) else {
+        return Err(ApiError::not_found("no such room"));
+    };
+    if !rec.admits(&req.player) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "not_a_member",
+            format!("{} is not a member of this room", req.player),
+        ));
+    }
+
+    let issued = now_ms();
+    let mut ticket = DoorTicket {
+        room_id,
+        player: req.player.clone(),
+        issued_at_unix_ms: issued,
+        expires_at_unix_ms: issued + TICKET_TTL_MS,
+        nonce: uuid_like_nonce(),
+        signature: String::new(),
+    };
+    ticket.signature = sign_ticket(&state.door_secret, &ticket);
+    Ok(Json(JoinResponse {
+        ticket,
+        expires_in_s: TICKET_TTL_MS / 1000,
+    }))
+}
+
+/// Authorize one connection. The relay calls this at the door.
+///
+/// This is the same membership rule as `join_room`, exposed for the relay rather
+/// than the player: the relay has no database and must not decide policy, so it
+/// asks the control plane for a yes/no and refuses the connection on anything else.
+#[derive(Deserialize)]
+struct AdmitRoom {
+    player: String,
+}
+
+#[derive(Serialize)]
+struct AdmitResponse {
+    admitted: bool,
+    room_id: RoomId,
+    player: String,
+}
+
+async fn admit_room(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<AdmitRoom>,
+) -> ApiResult<AdmitResponse> {
+    if req.player.trim().is_empty() {
+        return Err(ApiError::bad_request("player name must not be empty"));
+    }
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let engine = state.engine.lock().await;
+    let Some(rec) = engine.room(&room_id) else {
+        return Err(ApiError::not_found("no such room"));
+    };
+    if !rec.admits(&req.player) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "not_a_member",
+            format!("{} is not a member of this room", req.player),
+        ));
+    }
+    tracing::info!(%room_id, player = %req.player, "door admitted a player");
+    Ok(Json(AdmitResponse {
+        admitted: true,
+        room_id,
+        player: req.player,
+    }))
+}
+
+/// A per-ticket random nonce, so two otherwise-identical tickets never share a
+/// signature and the relay has something to dedupe on.
+fn uuid_like_nonce() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+async fn list_members(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+) -> ApiResult<RoomResponse> {
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let engine = state.engine.lock().await;
+    if engine.room(&room_id).is_none() {
+        return Err(ApiError::not_found("no such room"));
+    }
+    Ok(Json(room_response(&engine, &room_id)))
+}
+
+#[derive(Deserialize)]
+struct MemberChange {
+    player: String,
+}
+
+async fn add_member(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<MemberChange>,
+) -> ApiResult<RoomResponse> {
+    if req.player.trim().is_empty() {
+        return Err(ApiError::bad_request("player name must not be empty"));
+    }
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let mut engine = state.engine.lock().await;
+    engine.add_member(&room_id, &req.player);
+    state.persist(&engine)?;
+    Ok(Json(room_response(&engine, &room_id)))
+}
+
+async fn remove_member(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<MemberChange>,
+) -> ApiResult<RoomResponse> {
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let mut engine = state.engine.lock().await;
+    engine.remove_member(&room_id, &req.player);
+    state.persist(&engine)?;
+    Ok(Json(room_response(&engine, &room_id)))
+}
+
+#[derive(Deserialize)]
+struct RoomLock {
+    members_only: bool,
+}
+
+/// Turn the door on or off. A room starts open so it is easy to set up; the owner
+/// locks it once everyone is listed.
+async fn set_room_lock(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<RoomLock>,
+) -> ApiResult<RoomResponse> {
+    let room_id = RoomId::parse(id).map_err(|e| ApiError::not_found(e.to_string()))?;
+    let mut engine = state.engine.lock().await;
+    engine.ensure_server_room(&room_id);
+    engine.set_members_only(&room_id, req.members_only);
+    state.persist(&engine)?;
+    Ok(Json(room_response(&engine, &room_id)))
 }

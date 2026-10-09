@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use nomad_relay::{Registry, RoomRoute};
+use nomad_relay::{Door, Registry, RoomRoute};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -23,9 +23,13 @@ struct Cli {
     tunnel: String,
     /// A room to serve, as `hostname=room_id`. Repeat for many rooms.
     ///
-    /// Example: `--room friends.example.com=friends --room smp.example.com=smp`
+    /// Example: `--room friends.example.com=room_abc --room smp.example.com=room_def`
     #[arg(long = "room", value_parser = parse_room)]
     rooms: Vec<(String, String)>,
+    /// Control-plane base URL. When set, every login is checked against the room's
+    /// membership ("the door"). When omitted, the relay admits everyone.
+    #[arg(long, env = "NOMAD_CONTROL_PLANE")]
+    control_plane: Option<String>,
 }
 
 fn parse_room(raw: &str) -> Result<(String, String), String> {
@@ -51,16 +55,26 @@ async fn main() -> anyhow::Result<()> {
         anyhow::bail!("at least one --room hostname=room_id is required");
     }
 
+    // The door is shared: one control-plane client serves every room.
+    let door = cli.control_plane.as_deref().map(Door::new);
+    if door.is_some() {
+        tracing::info!("room membership is enforced at the door");
+    } else {
+        tracing::warn!("no --control-plane set: the relay will admit every login");
+    }
+
     let routes: Vec<RoomRoute> = cli
         .rooms
         .iter()
-        .map(|(host, room)| RoomRoute {
-            room_id: host.clone(),
+        .map(|(_host, room)| RoomRoute {
+            // The route is keyed by hostname; the door talks about the room id.
+            room_id: room.clone(),
             motd_offline: format!("NomadCraft :: {room} :: 世界休眠中 / asleep"),
             motd_online: format!("NomadCraft :: {room} :: 在线 / live"),
             version_name: "1.21.4".to_string(),
             max_players: 20,
             registry: Registry::new(),
+            door: door.clone(),
         })
         .collect();
 

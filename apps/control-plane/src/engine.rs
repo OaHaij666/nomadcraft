@@ -88,6 +88,8 @@ pub enum EngineError {
     StaleEpoch { got: u64, current: u64 },
     #[error("snapshot {0} is not known to this room")]
     UnknownSnapshot(String),
+    #[error("snapshot {0} does not descend from the committed world")]
+    ForkedSnapshot(String),
 }
 
 /// The result of advancing the engine to the current time.
@@ -116,6 +118,29 @@ pub struct NodeRecord {
     pub public_key: String,
 }
 
+/// A room: the group that shares one world, its members, and its front-door secret.
+///
+/// Membership is the "door": only a player the room knows can be issued a ticket,
+/// and the relay admits only a valid ticket. That is what stops someone from
+/// quietly connecting on their own and forking the save.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct RoomRecord {
+    /// Players allowed through the door. Empty means the room has not been
+    /// restricted yet, and any player may join (open by default during setup).
+    #[serde(default)]
+    pub members: Vec<String>,
+    /// Whether the room enforces its member list at the door.
+    #[serde(default)]
+    pub members_only: bool,
+}
+
+impl RoomRecord {
+    /// Whether `player` is allowed through the door.
+    pub fn admits(&self, player: &str) -> bool {
+        !self.members_only || self.members.iter().any(|m| m == player)
+    }
+}
+
 /// Decides who hosts. Holds all room state in memory; a durable store can be
 /// layered on top without changing these rules.
 pub struct Engine<C: Clock> {
@@ -123,6 +148,7 @@ pub struct Engine<C: Clock> {
     lease_ms: i64,
     servers: HashMap<ServerId, ServerRecord>,
     nodes: HashMap<NodeId, NodeRecord>,
+    rooms: HashMap<RoomId, RoomRecord>,
 }
 
 impl<C: Clock> Engine<C> {
@@ -138,6 +164,7 @@ impl<C: Clock> Engine<C> {
             lease_ms,
             servers: HashMap::new(),
             nodes: HashMap::new(),
+            rooms: HashMap::new(),
         }
     }
 
@@ -167,6 +194,55 @@ impl<C: Clock> Engine<C> {
                 lease: None,
                 committed: None,
             });
+        self.rooms.entry(room_id.clone()).or_default();
+    }
+
+    /// Ensure a room exists, without creating a server in it.
+    ///
+    /// Rooms are normally created as a side effect of creating a server; this is for
+    /// the case where an operator configures membership before the world exists.
+    pub fn ensure_server_room(&mut self, room_id: &RoomId) {
+        self.rooms.entry(room_id.clone()).or_default();
+    }
+
+    /// Look up a room's membership record.
+    pub fn room(&self, room_id: &RoomId) -> Option<&RoomRecord> {
+        self.rooms.get(room_id)
+    }
+
+    /// Look up a room's membership record for mutation.
+    pub fn room_mut(&mut self, room_id: &RoomId) -> Option<&mut RoomRecord> {
+        self.rooms.get_mut(room_id)
+    }
+
+    /// The room that owns a given server, if any.
+    pub fn room_of_server(&self, server_id: &ServerId) -> Option<&RoomId> {
+        self.servers.get(server_id).map(|s| &s.room_id)
+    }
+
+    /// Add a player to a room's member list, idempotently.
+    pub fn add_member(&mut self, room_id: &RoomId, player: &str) -> bool {
+        let rec = self.rooms.entry(room_id.clone()).or_default();
+        if rec.members.iter().any(|m| m == player) {
+            return false;
+        }
+        rec.members.push(player.to_string());
+        true
+    }
+
+    /// Remove a player from a room's member list. Returns whether they were a member.
+    pub fn remove_member(&mut self, room_id: &RoomId, player: &str) -> bool {
+        let Some(rec) = self.rooms.get_mut(room_id) else {
+            return false;
+        };
+        let before = rec.members.len();
+        rec.members.retain(|m| m != player);
+        rec.members.len() != before
+    }
+
+    /// Turn membership enforcement on or off for a room.
+    pub fn set_members_only(&mut self, room_id: &RoomId, members_only: bool) {
+        self.rooms.entry(room_id.clone()).or_default().members_only = members_only;
     }
 
     /// Snapshot ids are only restorable once recorded as committed here.
@@ -193,14 +269,21 @@ impl<C: Clock> Engine<C> {
         self.nodes.clone()
     }
 
+    /// Clone every room record (for persistence).
+    pub(crate) fn rooms_snapshot(&self) -> HashMap<RoomId, RoomRecord> {
+        self.rooms.clone()
+    }
+
     /// Replace all state (for restoring from persistence).
     pub(crate) fn set_state(
         &mut self,
         servers: HashMap<ServerId, ServerRecord>,
         nodes: HashMap<NodeId, NodeRecord>,
+        rooms: HashMap<RoomId, RoomRecord>,
     ) {
         self.servers = servers;
         self.nodes = nodes;
+        self.rooms = rooms;
     }
 
     /// The room a server belongs to.

@@ -7,6 +7,7 @@
 //!
 //! This crate is the vocabulary every component agrees on. It contains no I/O.
 
+pub mod door;
 pub mod epoch;
 pub mod ids;
 pub mod manifest;
@@ -14,6 +15,7 @@ pub mod message;
 pub mod node;
 pub mod room;
 
+pub use door::{sign_ticket, ticket_bytes, ticket_is_fresh, verify_ticket, DoorTicket};
 pub use epoch::Epoch;
 pub use ids::{NodeId, RoomId, ServerId, SnapshotId};
 pub use manifest::{FileEntry, FileKind, Manifest, PathPattern};

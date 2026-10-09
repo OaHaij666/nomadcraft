@@ -8,16 +8,19 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use nomad_proto::ids::{NodeId, ServerId};
+use nomad_proto::ids::{NodeId, RoomId, ServerId};
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{Clock, Engine, NodeRecord, ServerRecord};
+use crate::engine::{Clock, Engine, NodeRecord, RoomRecord, ServerRecord};
 
 /// A serializable copy of everything the engine knows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EngineState {
     pub servers: HashMap<ServerId, ServerRecord>,
     pub nodes: HashMap<NodeId, NodeRecord>,
+    /// Room membership, so the door survives a control-plane restart.
+    #[serde(default)]
+    pub rooms: HashMap<RoomId, RoomRecord>,
 }
 
 /// Load, mutate, and atomically persist engine state.
@@ -63,12 +66,13 @@ impl<C: Clock> Engine<C> {
         EngineState {
             servers: self.servers_snapshot(),
             nodes: self.nodes_snapshot(),
+            rooms: self.rooms_snapshot(),
         }
     }
 
     /// Replace all state from a previously exported copy.
     pub fn import(&mut self, state: EngineState) {
-        self.set_state(state.servers, state.nodes);
+        self.set_state(state.servers, state.nodes, state.rooms);
     }
 }
 

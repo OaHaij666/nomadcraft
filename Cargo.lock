@@ -629,6 +629,7 @@ dependencies = [
  "clap",
  "nomad-mcproto",
  "nomad-proto",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

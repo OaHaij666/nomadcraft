@@ -509,3 +509,303 @@ async fn stale_epoch_checkpoint_is_rejected() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json(&body)["code"], "stale_epoch");
 }
+
+/// A host may only commit a world that descends from the one it was handed.
+///
+/// This is the anti-fork guard: a machine that restored a stale copy, or simply
+/// kept running after losing the lease, must not be able to overwrite the committed
+/// world with its own divergent branch.
+#[tokio::test]
+async fn a_checkpoint_that_does_not_descend_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = app(tmp.path());
+
+    call(
+        &app,
+        "POST",
+        "/v1/nodes/register",
+        Some(serde_json::json!({ "name": "host", "cpu_cores": 8 })),
+    )
+    .await;
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(serde_json::json!({ "name": "world" })),
+    )
+    .await;
+    let server_id = json(&body)["server_id"].as_str().unwrap().to_string();
+
+    let (_, lease_body) = call(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/claim"),
+        Some(serde_json::json!({})),
+    )
+    .await;
+    let host = json(&lease_body)["node_id"].as_str().unwrap().to_string();
+    let epoch = json(&lease_body)["epoch"].as_u64().unwrap();
+
+    // One world on disk; a store that will hold both the committed branch and a
+    // divergent sibling.
+    let world = tmp.path().join("world-src");
+    std::fs::create_dir_all(world.join("world")).unwrap();
+    std::fs::write(world.join("world/level.dat"), b"root").unwrap();
+
+    let store = SnapshotStore::open(tmp.path().join("store")).unwrap();
+    let patterns = vec![
+        PathPattern::include("world*/"),
+        PathPattern::include("world"),
+    ];
+
+    let meta = |parent: Option<SnapshotId>, reason: &str| SnapshotMeta {
+        epoch,
+        node_id: host.clone(),
+        reason: reason.into(),
+        parent,
+    };
+
+    let root = store
+        .snapshot(&world, &patterns, meta(None, "root"))
+        .unwrap();
+    let root_manifest = store.manifest(&root.id).unwrap();
+
+    // A legitimate descendant of root.
+    std::fs::write(world.join("world/level.dat"), b"child").unwrap();
+    let child = store
+        .snapshot(&world, &patterns, meta(Some(root.id.clone()), "scheduled"))
+        .unwrap();
+    let child_manifest = store.manifest(&child.id).unwrap();
+
+    // A divergent sibling: same starting point, different edit, but no parent link.
+    std::fs::write(world.join("world/level.dat"), b"sibling").unwrap();
+    let sibling = store
+        .snapshot(&world, &patterns, meta(None, "manual"))
+        .unwrap();
+    let sibling_manifest = store.manifest(&sibling.id).unwrap();
+
+    // Helper: upload a snapshot fully, then commit it.
+    async fn upload(app: &axum::Router, store: &SnapshotStore, id: &SnapshotId) {
+        let manifest = store.manifest(id).unwrap();
+        let (status, _) = call_bytes(
+            app,
+            "PUT",
+            &format!("/v1/snapshots/{id}/manifest"),
+            manifest.to_canonical_bytes().unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "manifest upload");
+        for file in &manifest.files {
+            for hash in &file.chunks {
+                let chunk = ChunkId::from_hex(hash.clone());
+                let bytes = store.chunk_compressed(&chunk).unwrap();
+                let (status, _) = call_bytes(
+                    app,
+                    "PUT",
+                    &format!("/v1/snapshots/{id}/chunks/{hash}"),
+                    bytes,
+                )
+                .await;
+                assert_eq!(status, StatusCode::NO_CONTENT);
+            }
+        }
+    }
+
+    upload(&app, &store, &root.id).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/checkpoint"),
+        Some(serde_json::json!({
+            "node_id": host, "epoch": epoch, "snapshot_id": root.id, "reason": "root"
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "first snapshot establishes the world"
+    );
+
+    // The descendant is accepted.
+    upload(&app, &store, &child.id).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/checkpoint"),
+        Some(serde_json::json!({
+            "node_id": host, "epoch": epoch, "snapshot_id": child.id, "reason": "scheduled"
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "descendant commit: {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    // The sibling is refused, and the committed world is unchanged.
+    upload(&app, &store, &sibling.id).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/checkpoint"),
+        Some(serde_json::json!({
+            "node_id": host, "epoch": epoch, "snapshot_id": sibling.id, "reason": "manual"
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "divergent branch must not commit"
+    );
+    assert_eq!(json(&body)["code"], "forked_snapshot");
+
+    let (_, body) = call(&app, "GET", &format!("/v1/servers/{server_id}"), None).await;
+    assert_eq!(
+        json(&body)["committed_snapshot"],
+        child.id.as_str(),
+        "the committed world must still be the child snapshot"
+    );
+
+    // Keep the manifests alive until here so the compiler does not warn them unused.
+    let _ = (root_manifest, child_manifest, sibling_manifest);
+}
+
+#[tokio::test]
+async fn the_door_issues_a_ticket_only_to_members() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = app(tmp.path());
+
+    // A server exists -> its room exists.
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(serde_json::json!({ "name": "world" })),
+    )
+    .await;
+    let server_id = json(&body)["server_id"].as_str().unwrap().to_string();
+
+    // Fetch the room via the server.
+    let (status, body) = call(&app, "GET", &format!("/v1/servers/{server_id}/room"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let room_id = json(&body)["room_id"].as_str().unwrap().to_string();
+    assert_eq!(json(&body)["members_only"], false, "rooms start open");
+
+    // Open room: anyone may join and gets a verifiable ticket.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/join"),
+        Some(serde_json::json!({ "player": "alex" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ticket: nomad_proto::door::DoorTicket =
+        serde_json::from_value(json(&body)["ticket"].clone()).expect("ticket deserializes");
+    assert_eq!(ticket.player, "alex");
+    assert_eq!(ticket.room_id.as_str(), room_id);
+    assert!(
+        nomad_proto::door::verify_ticket(b"nomadcraft-development-door-secret", &ticket),
+        "ticket must verify with the development secret"
+    );
+
+    // Lock the room and list a member.
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/members"),
+        Some(serde_json::json!({ "player": "alex" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/lock"),
+        Some(serde_json::json!({ "members_only": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&body)["members_only"], true);
+
+    // The member is still admitted...
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/join"),
+        Some(serde_json::json!({ "player": "alex" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // ...but a stranger is refused at the door.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/join"),
+        Some(serde_json::json!({ "player": "mallory" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json(&body)["code"], "not_a_member");
+
+    // Empty names are rejected outright.
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/rooms/{room_id}/join"),
+        Some(serde_json::json!({ "player": "  " })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn room_membership_survives_a_control_plane_restart() {
+    let tmp = tempfile::tempdir().unwrap();
+
+    let room_id = {
+        let app = app(tmp.path());
+        let (_, body) = call(
+            &app,
+            "POST",
+            "/v1/servers",
+            Some(serde_json::json!({ "name": "world" })),
+        )
+        .await;
+        let server_id = json(&body)["server_id"].as_str().unwrap().to_string();
+        let (_, body) = call(&app, "GET", &format!("/v1/servers/{server_id}/room"), None).await;
+        let room_id = json(&body)["room_id"].as_str().unwrap().to_string();
+
+        call(
+            &app,
+            "POST",
+            &format!("/v1/rooms/{room_id}/members"),
+            Some(serde_json::json!({ "player": "alex" })),
+        )
+        .await;
+        call(
+            &app,
+            "POST",
+            &format!("/v1/rooms/{room_id}/lock"),
+            Some(serde_json::json!({ "members_only": true })),
+        )
+        .await;
+        room_id
+    };
+
+    // Fresh state opened over the same directory: membership must persist.
+    let app = app(tmp.path());
+    let (status, body) = call(&app, "GET", &format!("/v1/rooms/{room_id}/members"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&body)["members_only"], true);
+    assert_eq!(
+        json(&body)["members"],
+        serde_json::json!(["alex"]),
+        "the member list must survive a restart"
+    );
+}

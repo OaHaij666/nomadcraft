@@ -26,7 +26,9 @@ mod sync;
 pub use chunk::{chunk_bytes, ChunkId};
 pub use retention::{RetainedSnapshot, RetentionPlan, RetentionPolicy, Tier};
 pub use store::{GcReport, RestoreReport, SnapshotInfo, SnapshotMeta, SnapshotStore, VerifyReport};
-pub use sync::{is_complete, missing_chunks_for, pull, referenced_chunks, SyncReport};
+pub use sync::{
+    descends_from, is_complete, missing_chunks_for, pull, referenced_chunks, SyncReport,
+};
 
 /// Default target chunk size (average). Minecraft region files are a few MB, so a
 /// ~1 MiB average keeps dedup useful without producing millions of tiny chunks.
