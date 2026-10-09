@@ -13,3 +13,10 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Vendored trees: never commit dependencies or build output
+vendor/**/node_modules/
+vendor/**/production/
+vendor/**/dist/
+vendor/**/data/
+vendor/**/lib/*.exe

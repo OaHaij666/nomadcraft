@@ -1,0 +1,844 @@
+/**
+ * MANDATORY TEST GATE — DO NOT MODIFY WITHOUT RE-RUNNING THE INTEGRATION TESTS.
+ *
+ * This service is exercised by the real instance/Docker integration suite in
+ * `src/routers/__test__/Instance_router.integration.test.ts` (real Docker containers,
+ * real attach streams). Any change here can break container startup, output
+ * capture, PTY attach, termination or destruction.
+ *
+ * After editing this file, AI assistants and developers MUST run the
+ * `mcsmanager-test` skill and confirm the Docker + instance
+ * cases pass before finishing.
+ *   Skill: `.agents/skills/mcsmanager-test/SKILL.md`
+ */
+import { t } from "i18next";
+import { commandStringToArray } from "../entity/commands/base/command_parser";
+import DockerPullCommand from "../entity/commands/docker/docker_pull";
+import Instance from "../entity/instance/instance";
+import { DefaultDocker } from "./docker_service";
+
+import Docker from "dockerode";
+import fs from "fs-extra";
+import iconv from "iconv-lite";
+import { toText } from "mcsmanager-common";
+import path from "path";
+import { EventEmitter } from "stream";
+import { IInstanceProcess } from "../entity/instance/interface";
+import { $t } from "../i18n";
+import { resolveDockerWorkspacePath } from "../tools/docker_workspace_path";
+import { AsyncTask } from "./async_task_service";
+import logger from "./log";
+import { NetworkLimitService } from "./network_limit_service";
+import InstanceSubsystem from "./system_instance";
+import { getLinuxSystemId } from "../tools/system_user";
+import { sleep } from "../utils/sleep";
+
+type PublicPortArray = {
+  [key: string]: {
+    HostIp?: string;
+    HostPort: string;
+  }[];
+};
+
+type ExposedPorts = {
+  [key: string]: {};
+};
+
+const DOCKER_NAME_RELEASE_ATTEMPTS = 5;
+const DOCKER_NAME_RELEASE_DELAY_MS = 1000;
+
+function isDockerNameConflictError(error: any): boolean {
+  const message = String(error?.message ?? error ?? "");
+  return (
+    (error?.statusCode === 409 || error?.status === 409 || message.includes("HTTP code 409")) &&
+    message.includes("is already in use by container")
+  );
+}
+
+async function findContainerByName(
+  docker: DefaultDocker,
+  containerName: string
+): Promise<Docker.ContainerInfo | undefined> {
+  const containers = await docker.listContainers({
+    all: true,
+    filters: { name: [containerName] }
+  });
+
+  return containers.find((container) =>
+    container.Names?.some((name) => name === `/${containerName}` || name === containerName)
+  );
+}
+
+function belongsToInstance(container: Docker.ContainerInfo, instanceUuid: string): boolean {
+  return container.Labels?.["mcsmanager.instance.uuid"] === instanceUuid;
+}
+
+async function waitForContainerNameRelease(
+  docker: DefaultDocker,
+  containerName: string,
+  instanceUuid: string
+): Promise<boolean> {
+  for (let attempt = 0; attempt < DOCKER_NAME_RELEASE_ATTEMPTS; attempt++) {
+    const container = await findContainerByName(docker, containerName);
+    if (!container) return true;
+    if (!belongsToInstance(container, instanceUuid)) return false;
+    if (attempt + 1 < DOCKER_NAME_RELEASE_ATTEMPTS) {
+      await sleep(DOCKER_NAME_RELEASE_DELAY_MS);
+    }
+  }
+
+  return false;
+}
+
+async function createContainerWithNameRetry(
+  docker: DefaultDocker,
+  options: Docker.ContainerCreateOptions,
+  containerName: string,
+  instanceUuid: string
+): Promise<Docker.Container> {
+  try {
+    return await docker.createContainer(options);
+  } catch (error: any) {
+    if (!isDockerNameConflictError(error)) throw error;
+
+    const conflictingContainer = await findContainerByName(docker, containerName);
+    if (!conflictingContainer || !belongsToInstance(conflictingContainer, instanceUuid)) {
+      throw error;
+    }
+
+    if (!(await waitForContainerNameRelease(docker, containerName, instanceUuid))) {
+      throw error;
+    }
+
+    return await docker.createContainer(options);
+  }
+}
+
+function attachDockerContainer(container: Docker.Container): Promise<NodeJS.ReadWriteStream> {
+  const query = {
+    stream: true,
+    stdout: true,
+    stderr: true,
+    stdin: true
+  };
+
+  return new Promise((resolve, reject) => {
+    container.modem.dial(
+      {
+        path: `/containers/${container.id}/attach?`,
+        method: "POST",
+        isStream: true,
+        hijack: true,
+        openStdin: true,
+        file: Buffer.alloc(0),
+        statusCodes: {
+          200: true,
+          404: "no such container",
+          500: "server error"
+        },
+        options: {
+          ...query,
+          hijack: true,
+          _query: query
+        }
+      },
+      (error: Error | null, stream: NodeJS.ReadWriteStream | null) => {
+        if (error) return reject(error);
+        if (!stream) return reject(new Error("Docker attach returned no stream"));
+        resolve(stream);
+      }
+    );
+  });
+}
+
+// Error exception at startup
+export class StartupDockerProcessError extends Error {
+  constructor(msg: string) {
+    super(msg);
+  }
+}
+
+export interface IDockerProcessAdapterStartParam {
+  isTty: boolean;
+  h: number;
+  w: number;
+}
+
+export class SetupDockerContainer extends AsyncTask {
+  private container?: Docker.Container;
+
+  constructor(
+    public readonly instance: Instance,
+    public readonly startCommand?: string,
+    public readonly imageOverride?: string
+  ) {
+    super();
+  }
+
+  public async onStart() {
+    const instance = this.instance;
+    const customCommand = this.startCommand;
+    const useImageOverride = Boolean(this.imageOverride?.trim());
+
+    if (!fs.existsSync(this.instance.absoluteCwdPath())) {
+      await fs.mkdirs(instance.absoluteCwdPath());
+    }
+    // Because some accounts inside the container may be different from the account running MCSManager,
+    // not setting permissions to 777 may cause failure to install any files properly.
+    fs.chmod(this.instance.absoluteCwdPath(), 0o777).catch(() => {
+      logger.error(
+        `Failed to chmod the instance directory to 777: ${this.instance.absoluteCwdPath()}`
+      );
+    });
+
+    try {
+      await instance.forceExec(new DockerPullCommand(this.imageOverride?.trim()));
+    } catch (error: any) {
+      throw error;
+    }
+
+    // Command text parsing
+    let commandList: string[];
+    if (instance.config?.startCommand?.trim() || customCommand?.trim()) {
+      const tmpCmd = customCommand ?? instance.config.startCommand;
+      commandList = commandStringToArray(await instance.parseTextParams(tmpCmd));
+    } else {
+      commandList = [];
+    }
+    const dockerConfig = instance.config.docker;
+    if (!dockerConfig) {
+      throw new Error("Instance's Docker configuration is not found! ");
+    }
+
+    // Parsing port open
+    // 25565:25565/tcp 8080:8080/tcp
+    const portMap = dockerConfig.ports || [];
+
+    const logOpenedPorts: { host: string; container: number; protocol: string }[] = [];
+    const publicPortArray: PublicPortArray = {};
+    const exposedPorts: ExposedPorts = {};
+    for (const portConfigText of portMap) {
+      const elem = (await instance.parseTextParams(portConfigText)).split("/");
+      if (elem.length != 2) throw new Error($t("TXT_CODE_1cf6fc4b"));
+      const ports = elem[0];
+      const protocol = elem[1];
+      //Host (host) port: container port
+      const publicAndPrivatePort = ports.split(":");
+
+      // example: 8080:8080/tcp
+      if (publicAndPrivatePort.length == 2) {
+        const portKey = `${publicAndPrivatePort[1]}/${protocol}`;
+        publicPortArray[portKey] ||= [];
+        publicPortArray[portKey].push({ HostPort: publicAndPrivatePort[0] });
+        exposedPorts[portKey] = {};
+        logOpenedPorts.push({
+          host: publicAndPrivatePort[0],
+          container: Number(publicAndPrivatePort[1]),
+          protocol: protocol
+        });
+        continue;
+      }
+
+      // example: 127.0.0.1:8080:8080/tcp
+      if (publicAndPrivatePort.length == 3) {
+        const portKey = `${publicAndPrivatePort[2]}/${protocol}`;
+        publicPortArray[portKey] ||= [];
+        publicPortArray[portKey].push({
+          HostIp: publicAndPrivatePort[0],
+          HostPort: publicAndPrivatePort[1]
+        });
+        exposedPorts[portKey] = {};
+        logOpenedPorts.push({
+          host: publicAndPrivatePort[0] + ":" + publicAndPrivatePort[1],
+          container: Number(publicAndPrivatePort[2]),
+          protocol: protocol
+        });
+        continue;
+      }
+      throw new Error(t("TXT_CODE_2029027e"));
+    }
+
+    // resolve extra path mounts
+    const extraVolumes = dockerConfig.extraVolumes || [];
+    const extraBinds: { hostPath: string; containerPath: string }[] = [];
+    for (const item of extraVolumes) {
+      if (!item) throw new Error($t("TXT_CODE_ae441ea3"));
+      const paths = item.split("|");
+      if (paths.length < 2) throw new Error($t("TXT_CODE_dca030b8"));
+      const hostPath = path.normalize(paths[0]);
+      const containerPath = path.normalize(paths[1]);
+      extraBinds.push({ hostPath, containerPath });
+    }
+
+    const parseBlkioString = (input: string) => {
+      const match = input.trim().match(/^([^:]+):(\d+)([KMG]?B?)$/i);
+      if (!match) return null;
+      const unit = (match[3] || "").charAt(0).toUpperCase();
+      const multipliers: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3 };
+      return { Path: match[1].trim(), Rate: parseInt(match[2]) * (multipliers[unit] || 1) };
+    };
+
+    const deviceReadBps = (dockerConfig.deviceReadBps || [])
+      .map(parseBlkioString)
+      .filter((v) => v !== null);
+
+    const deviceWriteBps = (dockerConfig.deviceWriteBps || [])
+      .map(parseBlkioString)
+      .filter((v) => v !== null);
+
+    // memory limit
+    let maxMemory: number | undefined = undefined;
+    if (typeof dockerConfig.memory === "number" && dockerConfig.memory > 0)
+      maxMemory = dockerConfig.memory * 1024 * 1024;
+
+    // CPU usage calculation
+    let cpuQuota: number | undefined = undefined;
+    let cpuPeriod: number | undefined = undefined;
+    if (typeof dockerConfig.cpuUsage === "number" && dockerConfig.cpuUsage > 0) {
+      cpuQuota = dockerConfig.cpuUsage * 10 * 1000;
+      cpuPeriod = 1000 * 1000;
+    }
+
+    // Check the number of CPU cores
+    let cpusetCpus: string | undefined = undefined;
+    if (dockerConfig.cpusetCpus) {
+      const arr = dockerConfig.cpusetCpus.split(",");
+      arr.forEach((v: string) => {
+        if (isNaN(Number(v))) throw new Error($t("TXT_CODE_instance.invalidCpu", { v }));
+      });
+      cpusetCpus = dockerConfig.cpusetCpus;
+    }
+
+    // memory swap and swappiness
+    let memorySwap: number | undefined = undefined;
+    let memorySwappiness: number | undefined = undefined;
+    if (typeof dockerConfig.memorySwap === "number" && maxMemory)
+      memorySwap = dockerConfig.memorySwap * 1024 * 1024 + maxMemory;
+    if (
+      typeof dockerConfig.memorySwappiness === "number" &&
+      dockerConfig.memorySwappiness <= 100 &&
+      dockerConfig.memorySwappiness >= 0 &&
+      maxMemory
+    )
+      memorySwappiness = dockerConfig.memorySwappiness;
+
+    // container name check
+    let containerName = dockerConfig.containerName || `MCSM-${instance.instanceUuid.slice(0, 6)}`;
+    if (containerName && (containerName.length > 64 || containerName.length < 2)) {
+      throw new Error($t("TXT_CODE_instance.invalidContainerName", { v: containerName }));
+    }
+
+    const workingDir = dockerConfig.workingDir || undefined;
+
+    // capabilities
+    const capAdd = dockerConfig.capAdd || [];
+    const capDrop = dockerConfig.capDrop || [];
+
+    // resolve devices
+    // /dev/a, /dev/a|dev/b, /dev/a|/dev/b|rwm, /dev/a||rwm
+    const devices = dockerConfig.devices || [];
+    const parsedDevices: {
+      PathOnHost: string;
+      PathInContainer: string;
+      CgroupPermissions: string;
+    }[] = [];
+    for (const item of devices) {
+      if (!item) throw new Error($t("TXT_CODE_ae441ea4"));
+      const parts = item.split("|").map((p) => p.trim());
+      if (!parts[0]) throw new Error($t("TXT_CODE_ae441ea4"));
+      parsedDevices.push({
+        PathOnHost: parts[0],
+        PathInContainer: parts[1] || parts[0],
+        CgroupPermissions: parts[2] || "rwm"
+      });
+    }
+
+    const privileged = dockerConfig.privileged || false;
+
+    // GPU DeviceRequests
+    let gpuDeviceRequests: any[] | undefined = undefined;
+    if (dockerConfig.gpuEnabled) {
+      const gpuCount = dockerConfig.gpuCount ?? -1;
+      const gpuDeviceIds = dockerConfig.gpuDeviceIds ?? [];
+      const gpuDriver = dockerConfig.gpuDriver ?? "";
+
+      // Validate gpuCount: must be integer >= -1 and <= 128 (reasonable upper bound)
+      if (!Number.isInteger(gpuCount) || gpuCount < -1 || gpuCount > 128) {
+        throw new Error($t("TXT_CODE_gpu_invalid_count", { v: String(gpuCount) }));
+      }
+
+      // Validate gpuDeviceIds: each item must be non-empty and contain only [a-zA-Z0-9_-]
+      if (gpuDeviceIds.length > 128) {
+        throw new Error(
+          $t("TXT_CODE_gpu_invalid_device_id", { v: `(${gpuDeviceIds.length} items)` })
+        );
+      }
+      const gpuIdPattern = /^[a-zA-Z0-9_-]+$/;
+      for (const id of gpuDeviceIds) {
+        if (typeof id !== "string" || !id.trim() || id.length > 128 || !gpuIdPattern.test(id)) {
+          throw new Error($t("TXT_CODE_gpu_invalid_device_id", { v: id }));
+        }
+      }
+
+      // Validate gpuDriver: if set, must contain only letters and digits, max 32 chars
+      if (gpuDriver && (gpuDriver.length > 32 || !/^[a-zA-Z0-9]+$/.test(gpuDriver))) {
+        throw new Error($t("TXT_CODE_gpu_invalid_driver", { v: gpuDriver }));
+      }
+
+      // Conflict check: gpuDeviceIds and gpuCount > 0 are mutually exclusive
+      if (gpuDeviceIds.length > 0 && gpuCount > 0) {
+        throw new Error($t("TXT_CODE_gpu_conflict_count_and_ids"));
+      }
+
+      // Conflict check: gpuCount === 0 and no deviceIds => effectively disabled
+      if (gpuCount === 0 && gpuDeviceIds.length === 0) {
+        logger.warn(
+          `[SetupDockerContainer] GPU enabled but gpuCount=0 and no deviceIds specified, GPU will not be allocated. Instance: ${instance.instanceUuid}`
+        );
+      } else {
+        // Warn if privileged mode is also enabled
+        if (privileged) {
+          logger.warn(
+            `[SetupDockerContainer] GPU passthrough is configured alongside privileged mode. ` +
+              `In privileged mode the container already has access to all host devices. Instance: ${instance.instanceUuid}`
+          );
+        }
+
+        const deviceRequest: any = {
+          Driver: gpuDriver,
+          Capabilities: [["gpu"]],
+          Options: {}
+        };
+
+        if (gpuDeviceIds.length > 0) {
+          // Specific device IDs take priority, Count must be 0
+          deviceRequest.DeviceIDs = gpuDeviceIds;
+          deviceRequest.Count = 0;
+        } else {
+          // Allocate by count (-1 = all, positive integer = specific count)
+          deviceRequest.Count = gpuCount;
+        }
+
+        gpuDeviceRequests = [deviceRequest];
+      }
+    }
+
+    let cwd = instance.absoluteCwdPath();
+    const defaultInstanceDir = InstanceSubsystem.getInstanceDataDir();
+    const hostRealPath = toText(process.env.MCSM_DOCKER_WORKSPACE_PATH);
+    cwd = resolveDockerWorkspacePath(cwd, defaultInstanceDir, hostRealPath);
+
+    const mounts: Docker.MountConfig = [];
+    for (const v of extraBinds) {
+      const hostPath = await instance.parseTextParams(v.hostPath);
+      if (!fs.existsSync(hostPath)) fs.mkdirsSync(hostPath);
+      mounts.push({
+        Type: "bind",
+        Source: hostPath,
+        Target: await instance.parseTextParams(v.containerPath)
+      });
+    }
+    if (workingDir && cwd) {
+      mounts.push({
+        Type: "bind",
+        Source: cwd,
+        Target: await instance.parseTextParams(workingDir)
+      });
+    }
+
+    logger.info("----------------");
+    logger.info(`[SetupDockerContainer]`);
+    logger.info(`UUID: [${instance.instanceUuid}] [${instance.config.nickname}]`);
+    logger.info(`NAME: [${containerName}]`);
+    logger.info(`COMMAND: ${commandList.join(" ")}`);
+    logger.info(`CWD: ${cwd}, WORKING_DIR: ${workingDir}`);
+    logger.info(`NET_MODE: ${dockerConfig.networkMode}`);
+    logger.info(`OPEN_PORT: ${JSON.stringify(publicPortArray)}`);
+    logger.info(`Volume Mounts: ${JSON.stringify(mounts)}`);
+    logger.info(`NET_ALIASES: ${JSON.stringify(dockerConfig.networkAliases)}`);
+    logger.info(`UPLOAD_LIMIT: ${dockerConfig.uploadSpeedLimit} KB/s`);
+    logger.info(`DOWNLOAD_LIMIT: ${dockerConfig.downloadSpeedLimit} KB/s`);
+    logger.info(
+      `MEM_LIMIT: ${maxMemory ? (maxMemory / 1024 / 1024).toFixed(2) : "--"} MB, Swap: ${
+        memorySwap ? (memorySwap / 1024 / 1024).toFixed(2) : "--"
+      } MB`
+    );
+    logger.info(`GPU: ${gpuDeviceRequests ? JSON.stringify(gpuDeviceRequests) : "disabled"}`);
+
+    if (workingDir) {
+      instance.println("INFO", $t("TXT_CODE_e76e49e9") + cwd + " --> " + workingDir + "\n");
+    }
+
+    if (logOpenedPorts.length) {
+      instance.info.allocatedPorts = logOpenedPorts;
+      instance.println("INFO", $t("TXT_CODE_c1c548fb"));
+      logOpenedPorts.forEach((v) => {
+        instance.println(
+          "INFO",
+          $t("TXT_CODE_1e03347e", {
+            host: v.host,
+            container: v.container,
+            protocol: v.protocol
+          })
+        );
+      });
+    } else {
+      instance.info.allocatedPorts = [];
+    }
+
+    // Start Docker container creation and running
+    const docker = new DefaultDocker();
+
+    let entrypoint: string | string[] | undefined = commandList.length ? commandList[0] : undefined;
+    const startCmd = commandList.length > 1 ? commandList.slice(1) : undefined;
+
+    // Always send Entrypoint as an array: Docker accepts the array form on every API version (and requires it
+    // from v29), while Podman's Docker-compatible API rejects a plain string whatever version it reports.
+    const { Version: dockerVersion } = await docker.version();
+    if (entrypoint !== undefined) {
+      entrypoint = [entrypoint];
+    }
+
+    const effectiveImage = useImageOverride ? this.imageOverride! : dockerConfig.image;
+
+    logger.info(`Container Entrypoint: ${entrypoint}`);
+    logger.info(`Container Start Command: ${startCmd}`);
+    logger.info(`Docker Version: ${dockerVersion}`);
+    logger.info("----------------");
+
+    // Check if network rate limiting is enabled
+    const networkLimitService = NetworkLimitService.getInstance();
+    if (dockerConfig.uploadSpeedLimit || dockerConfig.downloadSpeedLimit) {
+      try {
+        networkLimitService.checkRequiredCommands();
+      } catch (error) {
+        instance.println("ERROR", $t("TXT_CODE_bdb9f7bb"));
+        throw error;
+      }
+    }
+
+    // Convert Linux host username to UID:GID format for Docker.
+    const runAs = instance.config.runAs?.trim();
+    let dockerUser: string | undefined = runAs || undefined;
+    const shouldResolveHostUser =
+      runAs && process.platform === "linux" && !runAs.includes(":") && !/^\d+$/.test(runAs);
+    if (shouldResolveHostUser) {
+      try {
+        const { uid, gid } = await getLinuxSystemId(runAs);
+        dockerUser = `${uid}:${gid}`;
+        logger.info(`Docker User: ${dockerUser} (converted from ${runAs})`);
+      } catch (error: any) {
+        logger.warn(`Failed to get UID/GID for user ${runAs}: ${error.message}`);
+      }
+    }
+
+    const containerOptions: Docker.ContainerCreateOptions = {
+      Entrypoint: entrypoint,
+      Cmd: startCmd,
+      name: containerName,
+      Hostname: containerName,
+      Image: effectiveImage,
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: true, // force PTY mode
+      WorkingDir: dockerConfig.changeWorkdir ? workingDir : undefined,
+      OpenStdin: true,
+      StdinOnce: false,
+      ExposedPorts: exposedPorts,
+      Env: dockerConfig?.env || [],
+      User: dockerUser,
+      Labels: {
+        ...dockerConfig.labels
+          ?.map((label) => {
+            const [key, ...rest] = label.split("=");
+            return { [key]: rest.join("=") };
+          })
+          .reduce((acc, cur) => ({ ...acc, ...cur }), {}),
+        "mcsmanager.instance.uuid": instance.instanceUuid
+      },
+      HostConfig: {
+        BlkioDeviceReadBps: deviceReadBps.length > 0 ? deviceReadBps : undefined,
+        BlkioDeviceWriteBps: deviceWriteBps.length > 0 ? deviceWriteBps : undefined,
+        Memory: maxMemory,
+        MemorySwap: memorySwap,
+        MemorySwappiness: memorySwappiness,
+        AutoRemove: true,
+        CpusetCpus: cpusetCpus,
+        CpuPeriod: cpuPeriod,
+        CpuQuota: cpuQuota,
+        PortBindings: publicPortArray,
+        NetworkMode: dockerConfig.networkMode,
+        Mounts: mounts,
+        CapAdd: capAdd,
+        CapDrop: capDrop,
+        Devices: parsedDevices,
+        Privileged: privileged,
+        DeviceRequests: gpuDeviceRequests
+      },
+      // Only set NetworkingConfig for user-defined networks.
+      // host/none don't support EndpointsConfig, and the default "bridge" network needs none (network-scoped
+      // aliases only work on user-defined networks); Podman's Docker-compatible API cannot resolve "bridge" by name
+      // in EndpointsConfig.
+      ...(dockerConfig.networkMode !== "host" &&
+        dockerConfig.networkMode !== "none" &&
+        (dockerConfig.networkMode || "bridge") !== "bridge" && {
+          NetworkingConfig: {
+            EndpointsConfig: {
+              [dockerConfig.networkMode || "bridge"]: {
+                Aliases: dockerConfig.networkAliases
+              }
+            }
+          }
+        })
+    };
+
+    this.container = await createContainerWithNameRetry(
+      docker,
+      containerOptions,
+      containerName,
+      instance.instanceUuid
+    );
+
+    await this.container.start();
+
+    // Apply bandwidth limits if configured
+    if (dockerConfig && (dockerConfig.uploadSpeedLimit || dockerConfig.downloadSpeedLimit)) {
+      try {
+        await networkLimitService.setBandwidthLimit(this.container.id, {
+          uploadLimit: dockerConfig.uploadSpeedLimit,
+          downloadLimit: dockerConfig.downloadSpeedLimit
+        });
+        logger.info(
+          `Applied bandwidth limits to container ${this.container.id}, Instance: ${instance.config.nickname}`
+        );
+      } catch (error: any) {
+        instance.println("ERROR", $t("TXT_CODE_49731eec"));
+        instance.println("ERROR", $t("TXT_CODE_9c95b60f") + error.message);
+        logger.error(`Failed to apply bandwidth limits:`, error);
+        this.container.kill().catch(() => {});
+        this.container.remove().catch(() => {});
+        await networkLimitService.clearBandwidthLimit(this.container.id);
+        throw error;
+      }
+    }
+
+    // Listen to events
+    this.container.wait(() => this.stop());
+  }
+
+  public async onStop() {
+    const containerId = this.container?.id;
+
+    try {
+      await this.container?.kill();
+    } catch (error) {}
+    try {
+      await this.container?.remove();
+    } catch (error) {}
+
+    if (containerId) {
+      try {
+        await NetworkLimitService.getInstance().clearBandwidthLimit(containerId);
+      } catch (error) {}
+    }
+  }
+
+  public getContainer() {
+    if (!this.container) throw new Error("Function getContainer(): Failed, Container is Null!");
+    return this.container;
+  }
+
+  public async attach(instance: Instance) {
+    const outputCode = instance.config.terminalOption.pty ? "utf-8" : instance.config.oe;
+    const container = this.container;
+    if (!container) throw new Error("Attach Failed, Container is Null!");
+    try {
+      const stream = await attachDockerContainer(container);
+      stream.on("data", (text: any) => instance.print(iconv.decode(text, outputCode)));
+      stream.on("error", (text: any) => instance.print(iconv.decode(text, outputCode)));
+    } catch (error: any) {
+      this.error(error);
+      throw error;
+    }
+  }
+
+  public async onError(err: Error) {}
+
+  public toObject() {}
+}
+
+// SubProcess adapter for Instance
+export class DockerProcessAdapter extends EventEmitter implements IInstanceProcess {
+  pid?: number | string;
+
+  private stream?: NodeJS.ReadWriteStream;
+  private streamGeneration = 0;
+  private reconnectTimer?: NodeJS.Timeout;
+  private reconnecting = false;
+  private stopping = false;
+  private exitEmitted = false;
+  private waitActive = false;
+  public container?: Docker.Container;
+
+  constructor(public readonly containerWrapper: SetupDockerContainer) {
+    super();
+  }
+
+  // Once the program is actually started, no errors can block the next startup process
+  public async start(param: IDockerProcessAdapterStartParam, container?: Docker.Container) {
+    try {
+      if (container) {
+        this.container = container;
+      } else {
+        await this.containerWrapper.start();
+        this.container = this.containerWrapper.getContainer();
+      }
+
+      const { isTty, h, w } = param;
+      if (isTty) {
+        this.container.resize({ h, w });
+      }
+
+      this.pid = this.container.id;
+      await this.attachStream();
+      this.watchExit();
+    } catch (error: any) {
+      this.kill();
+      throw error;
+    }
+  }
+
+  public write(data?: string) {
+    if (!data) return;
+    if (!this.stream) {
+      this.scheduleReconnect();
+      return;
+    }
+    try {
+      this.stream.write(data);
+    } catch (error) {
+      this.handleStreamLost(this.streamGeneration);
+    }
+  }
+
+  public async kill(s?: string) {
+    this.stopping = true;
+    this.clearReconnectTimer();
+    await this.container?.kill();
+    return true;
+  }
+
+  public async destroy() {
+    this.stopping = true;
+    this.clearReconnectTimer();
+    this.closeStream();
+    try {
+      await this.container?.remove();
+    } catch (error: any) {}
+  }
+
+  private async attachStream() {
+    if (!this.container || this.stream || this.stopping || this.exitEmitted) return;
+    const stream = await attachDockerContainer(this.container);
+    if (this.stopping || this.exitEmitted) {
+      (stream as any).destroy?.();
+      return;
+    }
+
+    const generation = ++this.streamGeneration;
+    this.stream = stream;
+    stream.on("data", (data) => {
+      if (generation === this.streamGeneration) this.emit("data", data);
+    });
+    stream.once("error", () => this.handleStreamLost(generation));
+    stream.once("end", () => this.handleStreamLost(generation));
+    stream.once("close", () => this.handleStreamLost(generation));
+  }
+
+  private handleStreamLost(generation: number) {
+    if (
+      generation !== this.streamGeneration ||
+      this.stopping ||
+      this.exitEmitted
+    )
+      return;
+    this.stream = undefined;
+    this.waitActive = false;
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(delay = 2000) {
+    if (this.stopping || this.exitEmitted || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.reconnect();
+    }, delay);
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+  }
+
+  private async reconnect() {
+    if (this.reconnecting || this.stopping || this.exitEmitted) return;
+    this.reconnecting = true;
+    try {
+      await this.attachStream();
+      this.watchExit();
+    } catch (error) {
+      this.scheduleReconnect(3000);
+    } finally {
+      this.reconnecting = false;
+    }
+  }
+
+  private watchExit() {
+    if (!this.container || this.waitActive || this.exitEmitted) return;
+    this.waitActive = true;
+    this.container.wait((error, result) => {
+      this.waitActive = false;
+      if (this.exitEmitted) return;
+      if (error) {
+        void this.handleWaitError();
+        return;
+      }
+      void this.handleContainerExit(result?.StatusCode ?? 0);
+    });
+  }
+
+  private async handleWaitError() {
+    if (!this.container || this.exitEmitted) return;
+    try {
+      const info = await this.container.inspect();
+      if (info.State?.Running) {
+        if (!this.stopping) this.scheduleReconnect();
+        else setTimeout(() => this.watchExit(), 3000);
+      } else {
+        await this.handleContainerExit(info.State?.ExitCode ?? 0);
+      }
+    } catch (error) {
+      if (!this.stopping) this.scheduleReconnect(3000);
+      else await this.handleContainerExit(0);
+    }
+  }
+
+  private async handleContainerExit(code: number) {
+    if (this.exitEmitted) return;
+    this.exitEmitted = true;
+    this.clearReconnectTimer();
+    this.closeStream();
+    try {
+      await this.container?.remove();
+    } catch (error) {}
+    this.emit("exit", code);
+  }
+
+  private closeStream() {
+    const stream = this.stream;
+    this.stream = undefined;
+    this.streamGeneration++;
+    (stream as any)?.destroy?.();
+  }
+}

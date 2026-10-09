@@ -1,0 +1,20 @@
+# Vendored MCSManager: keep source, ignore dependencies, build output, and state.
+#
+# We track the source so our changes are reviewable, but node_modules and build
+# artifacts are re-creatable and must never be committed.
+
+node_modules/
+production/
+dist/
+
+# Native tools downloaded at setup (large binaries, fetched by scripts/)
+daemon/lib/*.exe
+daemon/lib/*
+!daemon/lib/.gitkeep
+
+# Runtime state and instance data
+daemon/data/
+panel/data/
+
+# Local logs
+*.log
