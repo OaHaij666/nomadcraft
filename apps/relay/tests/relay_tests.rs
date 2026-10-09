@@ -16,6 +16,7 @@ use nomad_relay::{Registry, RoomRoute};
 
 fn route(host: &str) -> RoomRoute {
     RoomRoute {
+        hostname: host.to_string(),
         room_id: host.to_string(),
         motd_offline: format!("{host} :: asleep"),
         motd_online: format!("{host} :: live"),

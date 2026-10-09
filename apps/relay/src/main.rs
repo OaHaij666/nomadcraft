@@ -24,6 +24,9 @@ struct Cli {
     /// A room to serve, as `hostname=room_id`. Repeat for many rooms.
     ///
     /// Example: `--room friends.example.com=room_abc --room smp.example.com=room_def`
+    ///
+    /// The left side is the hostname players type; the right side is the opaque
+    /// control-plane room id the door checks membership against.
     #[arg(long = "room", value_parser = parse_room)]
     rooms: Vec<(String, String)>,
     /// Control-plane base URL. When set, every login is checked against the room's
@@ -66,8 +69,9 @@ async fn main() -> anyhow::Result<()> {
     let routes: Vec<RoomRoute> = cli
         .rooms
         .iter()
-        .map(|(_host, room)| RoomRoute {
-            // The route is keyed by hostname; the door talks about the room id.
+        .map(|(host, room)| RoomRoute {
+            // Players type the hostname; the door talks about the room id.
+            hostname: host.clone(),
             room_id: room.clone(),
             motd_offline: format!("NomadCraft :: {room} :: 世界休眠中 / asleep"),
             motd_online: format!("NomadCraft :: {room} :: 在线 / live"),

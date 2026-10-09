@@ -125,7 +125,10 @@ impl Registry {
 
 /// One room the relay can route to.
 pub struct RoomRoute {
-    /// Human-readable room id, for logs.
+    /// The hostname players type to reach this room. This is the routing key.
+    pub hostname: String,
+    /// The control-plane room id, used for the door and for logs. Distinct from the
+    /// hostname: a room can be reached at a friendly name but has an opaque id.
     pub room_id: String,
     /// What the server list should show while asleep or when the host is unknown.
     pub motd_offline: String,
@@ -388,7 +391,7 @@ pub async fn run_rooms(
     let route_map: Arc<HashMap<String, RoomRoute>> = Arc::new(
         routes
             .into_iter()
-            .map(|r| (r.room_id.to_ascii_lowercase(), r))
+            .map(|r| (r.hostname.to_ascii_lowercase(), r))
             .collect(),
     );
 
