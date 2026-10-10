@@ -5,6 +5,7 @@ import "@/assets/variables.scss";
 import "@/assets/variables-dark.scss";
 import "@/assets/global.scss";
 import "@/assets/bg-extend-theme.scss";
+import "@/assets/nomad-theme.scss";
 
 import "./initLib";
 
@@ -39,3 +40,4 @@ export async function mountApp() {
     app.mount("#app-mount-point");
   }
 }
+

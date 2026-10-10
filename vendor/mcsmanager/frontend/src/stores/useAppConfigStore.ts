@@ -12,12 +12,31 @@ export const useAppConfigStore = createGlobalState(() => {
   const isPreferredDark = usePreferredDark();
   const { getSettingsConfig } = useLayoutConfigStore();
 
+  // Shared tokens for both themes. The palette lives in assets/nomad-theme.scss;
+  // these values mirror it so Ant's components agree with our own CSS instead of
+  // fighting it. See docs/前端设计语言-v1.md.
+  const sharedTokens = {
+    fontFamily: '"IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif',
+    fontFamilyCode: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace',
+    borderRadius: 10,
+    borderRadiusLG: 14,
+    borderRadiusSM: 6,
+    fontSizeLG: 14,
+    fontSizeSM: 12,
+    fontSizeXL: 18,
+    // Motion stays short; the product never animates for its own sake.
+    motionDurationMid: "0.16s",
+    motionDurationSlow: "0.24s"
+  };
+
   const theme: ThemeConfig = reactive({
     algorithm: antTheme.defaultAlgorithm,
     token: {
-      fontSizeLG: 14,
-      fontSizeSM: 12,
-      fontSizeXL: 18
+      ...sharedTokens,
+      colorPrimary: "#3f7f78",
+      colorInfo: "#3f7f78",
+      colorError: "#b06a3d",
+      colorWarning: "#b06a3d"
     }
   });
   const appConfig = reactive({
@@ -26,7 +45,8 @@ export const useAppConfigStore = createGlobalState(() => {
 
   const logoImage = computed(() => appConfig.logoImage);
 
-  const currentTheme = useLocalStorage<AppTheme>(THEME_KEY, AppTheme.LIGHT);
+  // The product's signature look is the night sky, so dark is the default.
+  const currentTheme = useLocalStorage<AppTheme>(THEME_KEY, AppTheme.DARK);
 
   const isDarkTheme = computed(() => {
     if (currentTheme.value === AppTheme.DARK) return true;
@@ -68,12 +88,28 @@ export const useAppConfigStore = createGlobalState(() => {
 
   const setLight = () => {
     theme.algorithm = antTheme.defaultAlgorithm;
+    theme.token = {
+      ...sharedTokens,
+      colorPrimary: "#3f7f78",
+      colorInfo: "#3f7f78",
+      colorError: "#b06a3d",
+      colorWarning: "#b06a3d"
+    };
     document.body.classList.add("app-light-theme");
     document.body.classList.remove("app-dark-theme");
   };
 
   const setDark = () => {
     theme.algorithm = antTheme.darkAlgorithm;
+    // In the dark theme aurora becomes the action colour: it has enough contrast
+    // against our dusk surfaces, and it keeps one accent through the product.
+    theme.token = {
+      ...sharedTokens,
+      colorPrimary: "#7ad4c8",
+      colorInfo: "#7ad4c8",
+      colorError: "#e8894f",
+      colorWarning: "#e8894f"
+    };
     document.body.classList.add("app-dark-theme");
     document.body.classList.remove("app-light-theme");
   };
@@ -155,3 +191,6 @@ export const useAppConfigStore = createGlobalState(() => {
     themeConfig: theme
   };
 });
+
+
+

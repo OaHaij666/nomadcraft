@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import logo from "@/assets/logo.png";
 import { useHeaderMenus } from "@/hooks/useHeaderMenus";
 import { useScreen } from "@/hooks/useScreen";
-import { useAppConfigStore } from "@/stores/useAppConfigStore";
 import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import { MenuUnfoldOutlined } from "@ant-design/icons-vue";
 import { useScroll } from "@vueuse/core";
@@ -12,7 +10,6 @@ import CardPanel from "./CardPanel.vue";
 
 const route = useRoute();
 const { containerState } = useLayoutContainerStore();
-const { logoImage } = useAppConfigStore();
 
 const { menus, appMenus, handleToPage } = useHeaderMenus();
 
@@ -48,7 +45,7 @@ const openPhoneMenu = (b = false) => {
       <nav class="btns">
         <a href="." style="margin-right: 12px">
           <div class="logo">
-            <img :src="logoImage" style="height: 18px" />
+            <span class="nc-logo-mark">NomadCraft</span>
           </div>
         </a>
 
@@ -132,7 +129,7 @@ const openPhoneMenu = (b = false) => {
             </div>
           </div>
           <div>
-            <img :src="logo" style="height: 18px" />
+            <span class="nc-logo-mark">NomadCraft</span>
           </div>
           <div style="width: 100px" class="justify-end">
             <div v-for="(item, index) in appMenus" :key="index">
@@ -231,15 +228,15 @@ const openPhoneMenu = (b = false) => {
 }
 
 .app-header-wrapper {
-  box-shadow: 0 2px 4px 0 var(--card-shadow-color);
-  background-image: url("@/assets/side.png");
+  // Flat ink bar + one hairline. No image, no blur, no drop shadow: the header is
+  // a horizon line, not a floating panel.
+  background: var(--nc-ink);
+  border-bottom: var(--nc-hairline);
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: var(--app-header-bg);
-  backdrop-filter: saturate(180%) blur(20px);
-  color: var(--app-header-text-color);
+  color: var(--nc-parchment);
 
   position: fixed;
   top: 0;
@@ -272,8 +269,8 @@ const openPhoneMenu = (b = false) => {
   .nav-button {
     margin: 0 4px;
     font-size: 14px;
-    transition: all 0.4s;
-    color: var(--app-header-text-color) !important;
+    transition: background-color var(--nc-dur-fast) var(--nc-ease), color var(--nc-dur-fast) var(--nc-ease);
+    color: var(--nc-mist) !important;
     text-align: center;
     padding: 8px 12px;
     min-width: 40px;
@@ -292,11 +289,11 @@ const openPhoneMenu = (b = false) => {
     font-size: 16px !important;
   }
   .nav-button:hover {
-    background-color: rgba(215, 215, 215, 0.261);
+    background-color: var(--nc-dusk);
   }
 
   .nav-button-active {
-    background-color: rgba(215, 215, 215, 0.35);
+    background-color: var(--nc-dusk);
   }
 
   .logo {
@@ -322,4 +319,22 @@ const openPhoneMenu = (b = false) => {
     }
   }
 }
+// The wordmark is drawn, not an image: crisp at any size, and it never carries
+// the previous vendor's Minecraft block lettering into our design.
+.nc-logo-mark {
+  font-family: var(--nc-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--nc-parchment);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+a {
+  text-decoration: none;
+}
+
 </style>
+
+

@@ -143,14 +143,28 @@ onMounted(async () => {
     <CardPanel class="login-panel">
       <template #body>
         <div v-show="loginStep === 0" class="login-panel-body">
-          <a-typography-title :level="3" class="mb-20 glitch-wrapper">
-            <div
-              class="glitch"
-              :data-text="props.card?.title ? props.card?.title : t('TXT_CODE_3ba5ad')"
-            >
-              {{ props.card?.title ? props.card?.title : t("TXT_CODE_3ba5ad") }}
+          <!-- The wordmark is the page's only loud element; everything else
+               around it stays quiet. -->
+          <div class="nc-wordmark">
+            <span class="nc-wordmark-name">NomadCraft</span>
+            <span class="nc-wordmark-rule" aria-hidden="true"></span>
+            <span class="nc-wordmark-tag">{{
+              props.card?.title ? props.card?.title : t("TXT_CODE_3ba5ad")
+            }}</span>
+          </div>
+          <!-- Two worlds, drawn only with type and a hairline: one awake on
+               someone's machine, one asleep. This is the daily question, so it
+               is what the first screen shows. -->
+          <div class="nc-worldmarks" aria-hidden="true">
+            <div class="world live">
+              <span class="name"><span class="dot"></span>星河镇</span>
+              <span class="meta">在 alex 的电脑上</span>
             </div>
-          </a-typography-title>
+            <div class="world asleep">
+              <span class="name"><span class="dot"></span>老存档</span>
+              <span class="meta">休眠中</span>
+            </div>
+          </div>
           <a-typography-paragraph class="mb-20">
             {{ t("TXT_CODE_5b60ad00") }}
           </a-typography-paragraph>
@@ -223,16 +237,20 @@ onMounted(async () => {
               </form>
 
               <div class="mt-24 flex-between align-center">
-                <div class="mcsmanager-link">
+                <!-- Attribution to the upstream project is a licence
+                     requirement; keep it, but keep it quiet. -->
+                <div class="nc-attribution">
                   <div
                     v-if="pageInfoResult?.loginInfo"
                     class="global-markdown-html"
                     v-html="markdownToHTML(pageInfoResult?.loginInfo || '')"
                   ></div>
-                  Powered by
-                  <a href="https://mcsmanager.com" target="_blank" rel="noopener noreferrer">
-                    MCSManager
-                  </a>
+                  <span>
+                    Powered by
+                    <a href="https://mcsmanager.com" target="_blank" rel="noopener noreferrer">
+                      MCSManager
+                    </a>
+                  </span>
                 </div>
                 <div class="justify-end">
                   <a-button
@@ -305,40 +323,117 @@ onMounted(async () => {
 </style>
 
 <style lang="scss" scoped>
-.logging {
-  .login-panel {
-    transform: scale(0.94);
-    border: 2px solid var(--color-blue-5);
-    box-shadow: 0 0 20px rgba(28, 120, 207, 0.3);
-  }
-}
+@import "@/assets/nomad-theme.scss";
+
+// The login screen is the product''s first impression, so it opens with the one
+// thing that is uniquely ours: two worlds, one already awake and one still
+// asleep, drawn only with type and a hairline. No glitch, no glow, no gradient.
+
 .login-panel {
   margin: 0 auto;
-  transition: all 0.4s;
   width: 100%;
-  // backdrop-filter: saturate(120%) blur(12px);
-  background-color: var(--login-panel-bg);
-
-  .login-panel-body {
-    padding: 28px 24px;
-    min-height: 322px;
-  }
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: opacity var(--nc-dur) var(--nc-ease);
 }
 
-.mcsmanager-link {
-  font-size: var(--font-body);
-  text-align: right;
-  color: var(--color-gray-7);
-  a {
-    color: var(--color-gray-7) !important;
-    text-decoration: underline;
-  }
+.login-panel-body {
+  padding: 32px 28px 28px;
+  min-height: 322px;
 }
+
+.nc-wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.nc-wordmark-name {
+  font-family: var(--nc-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--nc-parchment);
+}
+
+.nc-wordmark-rule {
+  height: 1px;
+  width: 100%;
+  background: var(--nc-haze);
+}
+
+.nc-wordmark-tag {
+  font-family: var(--nc-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--nc-mist);
+}
+
+// The two worlds are the memorable element: a live one carries an aurora mark,
+// an asleep one is only an outline.
+.nc-worldmarks {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.nc-worldmarks .world {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--nc-radius);
+  border: var(--nc-hairline);
+  background: rgba(18, 19, 28, 0.35);
+}
+
+.nc-worldmarks .world.live {
+  border-color: var(--nc-aurora-dim);
+}
+
+.nc-worldmarks .world .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nc-parchment);
+}
+
+.nc-worldmarks .world .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nc-haze);
+  flex-shrink: 0;
+}
+
+.nc-worldmarks .world.live .dot {
+  background: var(--nc-aurora);
+}
+
+.nc-worldmarks .world .meta {
+  font-family: var(--nc-font-mono);
+  font-size: 11px;
+  color: var(--nc-mist);
+}
+
 .logging-icon {
+  color: var(--nc-aurora);
   animation: opacityAnimation 0.4s;
 }
+
 .login-success-icon {
+  color: var(--nc-aurora) !important;
   animation: scaleAnimation 0.4s;
+}
+
+.account-input-container input {
+  background-color: transparent;
 }
 
 @keyframes opacityAnimation {
@@ -356,146 +451,6 @@ onMounted(async () => {
   }
   100% {
     transform: scale(1);
-  }
-}
-
-@keyframes moveAnimation {
-  0% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(0, 8px);
-  }
-  50% {
-    transform: translate(8px, 8px);
-  }
-  75% {
-    transform: translate(8px, 0);
-  }
-  100% {
-    transform: translate(0, 0);
-  }
-}
-
-@keyframes moveAnimation2 {
-  0% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(0, 2px);
-  }
-  50% {
-    transform: translate(2px, 2px);
-  }
-  75% {
-    transform: translate(2px, 0);
-  }
-  100% {
-    transform: translate(0, 0);
-  }
-}
-
-.glitch-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-
-.glitch {
-  position: relative;
-  font-weight: 600;
-  animation: glitch-trigger 4s infinite;
-
-  &::before,
-  &::after {
-    content: attr(data-text);
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    overflow: hidden;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  &::before {
-    color: #ff0040;
-    animation: glitch-anim-1 4s infinite;
-  }
-
-  &::after {
-    color: #00ffff;
-    animation: glitch-anim-2 4s infinite;
-  }
-}
-
-@keyframes glitch-trigger {
-  0%,
-  96% {
-    transform: translate(0);
-  }
-  97%,
-  100% {
-    transform: translate(-1px, 1px);
-  }
-}
-
-@keyframes glitch-anim-1 {
-  0%,
-  96% {
-    transform: translate(0);
-    opacity: 0;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-  }
-  97% {
-    transform: translate(-2px, -2px);
-    opacity: 0.7;
-    clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
-  }
-  98% {
-    transform: translate(2px, 1px);
-    opacity: 0.8;
-    clip-path: polygon(0 35%, 100% 35%, 100% 70%, 0 70%);
-  }
-  99% {
-    transform: translate(-1px, 2px);
-    opacity: 0.9;
-    clip-path: polygon(0 70%, 100% 70%, 100% 100%, 0 100%);
-  }
-  100% {
-    transform: translate(0);
-    opacity: 0;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-  }
-}
-
-@keyframes glitch-anim-2 {
-  0%,
-  96% {
-    transform: translate(0);
-    opacity: 0;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-  }
-  97% {
-    transform: translate(2px, 1px);
-    opacity: 0.6;
-    clip-path: polygon(0 0, 100% 0, 100% 25%, 0 25%);
-  }
-  98% {
-    transform: translate(-2px, -1px);
-    opacity: 0.7;
-    clip-path: polygon(0 25%, 100% 25%, 100% 75%, 0 75%);
-  }
-  99% {
-    transform: translate(1px, -2px);
-    opacity: 0.8;
-    clip-path: polygon(0 75%, 100% 75%, 100% 100%, 0 100%);
-  }
-  100% {
-    transform: translate(0);
-    opacity: 0;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   }
 }
 </style>

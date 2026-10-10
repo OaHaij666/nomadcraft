@@ -1,0 +1,137 @@
+// NomadCraft design tokens — "Twilight World".
+//
+// One source of truth for the product's visual language. See
+// docs/前端设计语言-v1.md for the reasoning; this file is just the mechanics.
+//
+// The palette is deliberately small: two neutral ramps (ink → haze) and exactly
+// two semantic colours (aurora = alive/affirmative, ember = offline/urgent).
+// Anything that needs a third colour is usually a sign the information should be
+// neutrals plus layout instead.
+
+:root,
+.app-dark-theme,
+.app-light-theme {
+  /* ── Surface ramp ──────────────────────────────────────────────
+     Night sky, not pure black. The slight purple keeps it from reading as
+     "default dark theme". */
+  --nc-ink: #12131c;
+  --nc-dusk: #1b1c29;
+  --nc-haze: #2a2b40;
+  --nc-veil: #353650;
+
+  /* ── Text ramp ───────────────────────────────────────────────── */
+  --nc-parchment: #e8e4d9;
+  --nc-mist: #9a97b0;
+  --nc-faint: #6b6880;
+
+  /* ── Semantics ──────────────────────────────────────────────── */
+  --nc-aurora: #7ad4c8;
+  --nc-aurora-dim: #3f7f78;
+  --nc-ember: #e8894f;
+  --nc-ember-dim: #8f5a37;
+
+  /* ── Accent allow-list ────────────────────────────────────────
+     These three are the ONLY places aurora may appear as a fill. Keeping the
+     list explicit stops the accent leaking into decoration. */
+  --nc-online: var(--nc-aurora);
+  --nc-offline: var(--nc-ember);
+
+  /* ── Geometry ───────────────────────────────────────────────── */
+  --nc-radius-sm: 6px;
+  --nc-radius: 10px;
+  --nc-radius-lg: 14px;
+  --nc-hairline: 1px solid rgba(232, 228, 217, 0.08);
+  --nc-hairline-strong: 1px solid rgba(232, 228, 217, 0.16);
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --nc-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --nc-dur-fast: 140ms;
+  --nc-dur: 220ms;
+
+  /* ── Type ───────────────────────────────────────────────────── */
+  --nc-font-display: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --nc-font-body: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --nc-font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+/* Motion is a courtesy, never a requirement. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --nc-dur-fast: 0ms;
+    --nc-dur: 0ms;
+  }
+}
+
+// ── Type roles ────────────────────────────────────────────────────
+// Applied by class so components opt in, rather than one global override that
+// fights the component library.
+.nc-display {
+  font-family: var(--nc-font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--nc-parchment);
+}
+
+.nc-mono {
+  font-family: var(--nc-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+// ── The world card: the product's one memorable element ───────────
+// Everything else on screen stays quiet so this can carry the page.
+.nc-world-card {
+  position: relative;
+  border-radius: var(--nc-radius-lg);
+  background: var(--nc-dusk);
+  border: var(--nc-hairline);
+  padding: 22px 24px;
+  text-align: left;
+  transition:
+    transform var(--nc-dur) var(--nc-ease),
+    box-shadow var(--nc-dur) var(--nc-ease),
+    border-color var(--nc-dur) var(--nc-ease);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.nc-world-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--nc-hairline-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+// A world that is live gets a single aurora edge — the one orchestrated moment.
+.nc-world-card[data-state="live"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--nc-aurora-dim);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nc-world-card[data-state="live"]::after {
+    animation: nc-aurora-sweep 900ms var(--nc-ease) 1;
+  }
+}
+
+@keyframes nc-aurora-sweep {
+  0% {
+    box-shadow: inset 0 0 0 1px rgba(122, 212, 200, 0);
+  }
+  45% {
+    box-shadow: inset 0 0 0 1px rgba(122, 212, 200, 0.85);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1px var(--nc-aurora-dim);
+  }
+}
+
+.nc-world-card[data-state="asleep"] {
+  opacity: 0.72;
+}
+
+.nc-world-card[data-state="asleep"]:hover {
+  opacity: 1;
+}

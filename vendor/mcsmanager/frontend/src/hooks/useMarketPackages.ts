@@ -45,6 +45,24 @@ export const matchesLanguage = (
 };
 
 /**
+ * NomadCraft ships one game: Minecraft. The market feed it reads is MCSManager's
+ * full catalogue (Squad, Rust, Factorio, Palworld…) and surfacing those would
+ * promise a product we do not build. Everything this screen shows has to be
+ * something we actually host, so the feed is filtered to the Minecraft mainline.
+ *
+ * Kept as data rather than deleted code, so re-enabling a game later is one line.
+ */
+export const NOMAD_GAME_TYPES = ["Minecraft"];
+
+export function isSupportedPackage(item: Pick<QuickStartPackages, "gameType" | "setupInfo">): boolean {
+  if (NOMAD_GAME_TYPES.includes(item.gameType)) return true;
+  // Some entries are untyped but clearly Minecraft servers; identify them by the
+  // instance type they would create.
+  const type = String(item.setupInfo?.type ?? "");
+  return type.startsWith("minecraft/");
+}
+
+/**
  * Composable for market packages filtering and search functionality
  */
 export function useMarketPackages(options: UseMarketPackagesOptions = {}) {
@@ -288,7 +306,8 @@ export function useMarketPackages(options: UseMarketPackagesOptions = {}) {
     try {
       const list = await getQuickInstallListAddr();
       languageOptions.value = list.value?.languages || [];
-      packages.value = list.value?.packages || [];
+      // Only offer templates this product actually hosts (see NOMAD_GAME_TYPES).
+      packages.value = (list.value?.packages || []).filter(isSupportedPackage);
     } catch (err: any) {
       console.error(err.message);
       return reportErrorMsg(err.message);

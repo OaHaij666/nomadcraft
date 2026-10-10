@@ -50,30 +50,21 @@ const skeletonConfigs = [
 <style></style>
 
 <style lang="scss">
-@keyframes scaleAnimation {
-  0% {
-    transform: scale(1);
-  }
-  20% {
-    transform: scale(0.9);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-}
+@import "@/assets/nomad-theme.scss";
 
+// The login backdrop: the night sky the product is named for, rendered with two
+// flat tonal stops and a hairline. Deliberately no blur, no vignette, no glow —
+// chrome here would compete with the wordmark.
 .login-page-container {
   position: fixed;
-  left: 0px;
-  right: 0px;
-  bottom: 0px;
-  top: 0px;
-
-  background-color: #29292957;
-  backdrop-filter: saturate(120%) blur(10px);
-  transition: all 0.8s;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 80% at 50% 0%,
+      var(--nc-dusk) 0%,
+      var(--nc-ink) 62%
+    ),
+    var(--nc-ink);
   overflow-y: auto;
   overflow-x: hidden;
 
@@ -84,13 +75,11 @@ const skeletonConfigs = [
     margin: 0 auto;
     height: 100%;
     position: relative;
+
     .main-flex-center {
       margin-top: 0 !important;
       position: absolute;
-      left: 0px;
-      right: 0px;
-      bottom: 0px;
-      top: 0px;
+      inset: 0;
       display: flex;
       justify-content: center;
       align-items: center;
