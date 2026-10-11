@@ -5,13 +5,9 @@ import {
   AppstoreOutlined,
   AreaChartOutlined,
   CloseOutlined,
-  LinkOutlined,
-  LoginOutlined,
   MenuOutlined,
   SettingOutlined,
-  ShopOutlined,
-  TeamOutlined,
-  UserOutlined
+  TeamOutlined
 } from "@ant-design/icons-vue";
 import type { Component } from "vue";
 import { ref } from "vue";
@@ -22,15 +18,13 @@ const { menus, handleToPage } = useHeaderMenus();
 const isExpanded = ref(false);
 
 const routePathIcons: Record<string, Component> = {
+  "/catalog": AppstoreOutlined,
   "/instances": AppstoreOutlined,
-  "/market": ShopOutlined,
   "/overview": AreaChartOutlined,
   "/users": TeamOutlined,
   "/node": ApartmentOutlined,
   "/settings": SettingOutlined,
-  "/customer": UserOutlined,
-  "/login": LoginOutlined,
-  "/_open_page": LinkOutlined
+  "/customer": AppstoreOutlined
 };
 
 const getRouteIcon = (path: string): Component => routePathIcons[path] ?? MenuOutlined;
@@ -64,9 +58,10 @@ const handleMenuItemClick = (path: string) => {
           :key="item.path"
           class="fab-menu-item"
           :class="{ 'fab-menu-item--active': isActive(item.path) }"
+          :aria-label="String(item.name)"
           @click="handleMenuItemClick(item.path)"
         >
-          <span class="fab-menu-icon-wrap">
+          <span class="fab-menu-label">{{ item.name }}</span><span class="fab-menu-icon-wrap">
             <component :is="getRouteIcon(item.path)" class="fab-menu-icon" />
           </span>
         </button>

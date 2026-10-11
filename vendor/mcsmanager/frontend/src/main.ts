@@ -1,5 +1,4 @@
 import { initI18n } from "@/lang/i18n";
-import { initLayoutConfig } from "./services/layout";
 import { useAppStateStore } from "./stores/useAppStateStore";
 import { setAppLoadingError, setLoadingTitle } from "./tools/dom";
 import { AppTheme, THEME_KEY } from "./types/const";
@@ -21,16 +20,23 @@ function applyAppModeTheme() {
   }
 }
 
+function embeddedSessionToken(): string {
+  const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  const query = new URLSearchParams(hashQuery || window.location.search.slice(1));
+  return query.get('nomadToken') || '';
+}
+
 async function initApp() {
   try {
     applyAppModeTheme();
     const { state, updatePanelStatus } = useAppStateStore();
+    const token = embeddedSessionToken();
+    if (token) state.userInfo = { token } as any;
     setLoadingTitle("Initializing Application...");
     await updatePanelStatus();
     setLoadingTitle("Initializing Language...");
     await initI18n(state.language);
-    setLoadingTitle("Initializing Layout...");
-    await initLayoutConfig();
+    document.title = "NomadCraft";
     setLoadingTitle("Downloading JavaScript Files...");
     const module = await import("./mount");
     setLoadingTitle("Rendering Application...");

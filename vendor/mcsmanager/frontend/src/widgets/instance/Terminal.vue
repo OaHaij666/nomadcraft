@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import CardPanel from "@/components/CardPanel.vue";
-import { openMarketDialog, openRenewalDialog } from "@/components/fc";
+import { openRenewalDialog } from "@/components/fc";
 import IconBtn from "@/components/IconBtn.vue";
 import TerminalCore from "@/components/TerminalCore.vue";
 import TerminalTopTags from "@/components/TerminalTopTags.vue";
@@ -27,7 +27,6 @@ import {
   CloudServerOutlined,
   DownOutlined,
   InfoCircleOutlined,
-  InteractionOutlined,
   LaptopOutlined,
   LoadingOutlined,
   MoneyCollectOutlined,
@@ -209,27 +208,7 @@ const instanceOperations = computed(() =>
       },
       condition: () => isStopped.value && updateCmd.value
     },
-    {
-      title: t("TXT_CODE_b19ed1dd"),
-      icon: InteractionOutlined,
-      noConfirm: true,
-      click: async () => {
-        try {
-          clearTerminal();
-          await openMarketDialog(daemonId ?? "", instanceId ?? "", {
-            autoInstall: true,
-            onlyDockerTemplate: isDockerMode.value
-          });
-        } catch (error: any) {
-          // ignore
-        }
-      },
-      props: {},
-      condition: () =>
-        isStopped.value &&
-        (state.settings.allowUsePreset || isAdmin.value) &&
-        !isGlobalTerminal.value
-    },
+
     {
       title: t("TXT_CODE_f77093c8"),
       icon: MoneyCollectOutlined,

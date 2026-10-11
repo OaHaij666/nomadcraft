@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HostingPreference from "./HostingPreference.vue";
 import CopyButton from "@/components/CopyButton.vue";
 import { PERMISSION_MAP } from "@/config/const";
 import { t } from "@/lang/i18n";
@@ -146,6 +147,8 @@ const disable2FACode = async () => {
           <a-tag>{{ state.userInfo?.uuid }}</a-tag>
         </a-form-item>
 
+        <HostingPreference class="mb-24" />
+
         <a-form-item :label="t('TXT_CODE_551b0348')">
           <a-button v-if="!formState.resetPassword" danger @click="formState.resetPassword = true">
             {{ t("TXT_CODE_50d471b2") }}
@@ -203,7 +206,8 @@ const disable2FACode = async () => {
           </a-typography-paragraph>
           <a-typography-paragraph v-if="generatedApiKey">
             <pre
-              class="flex flex-between align-center">{{ generatedApiKey }} <CopyButton size="small" type="text" :value="generatedApiKey" /> </pre>
+              class="flex flex-between align-center"
+            >{{ generatedApiKey }} <CopyButton size="small" type="text" :value="generatedApiKey" /> </pre>
           </a-typography-paragraph>
           <a-typography-paragraph v-else-if="state.userInfo?.apiKey">
             <pre>{{ t("TXT_CODE_1e7b57ae") }}</pre>

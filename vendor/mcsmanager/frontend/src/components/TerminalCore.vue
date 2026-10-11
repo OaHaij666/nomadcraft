@@ -4,7 +4,6 @@ import { useCommandHistory } from "@/hooks/useCommandHistory";
 import { useXhrPollError } from "@/hooks/useXhrPollError";
 import { t } from "@/lang/i18n";
 import { getInstanceOutputLog } from "@/services/apis/instance";
-import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import { CodeOutlined, DeleteOutlined, LoadingOutlined } from "@ant-design/icons-vue";
 import { Terminal } from "@xterm/xterm";
 import { message } from "ant-design-vue";
@@ -18,8 +17,6 @@ const props = defineProps<{
   height: string;
   useTerminalHook: UseTerminalHook;
 }>();
-
-const { containerState } = useLayoutContainerStore();
 
 const {
   focusHistoryList,
@@ -66,7 +63,6 @@ const handleClickHistoryItem = (item: string) => {
 };
 
 const initTerminal = async () => {
-  if (containerState.isDesignMode) return;
   const dom = document.getElementById(terminalDomId);
   if (dom) {
     const term = initTerminalWindow(dom);
@@ -145,14 +141,7 @@ onMounted(async () => {
     </div>
     <div class="terminal-wrapper global-card-container-shadow position-relative">
       <div class="terminal-container">
-        <div
-          v-if="!containerState.isDesignMode"
-          :id="terminalDomId"
-          :style="{ height: props.height }"
-        ></div>
-        <div v-else :style="{ height: props.height }">
-          <p class="terminal-design-tip">{{ $t("TXT_CODE_7ac6f85c") }}</p>
-        </div>
+        <div :id="terminalDomId" :style="{ height: props.height }"></div>
       </div>
     </div>
     <div class="command-input">
@@ -171,7 +160,7 @@ onMounted(async () => {
         v-model:value="commandInputValue"
         :placeholder="t('TXT_CODE_555e2c1b')"
         autofocus
-        :disabled="containerState.isDesignMode || !isConnect"
+        :disabled="!isConnect"
         @press-enter="handleSendCommand"
         @keydown="handleHistorySelect"
       >

@@ -1,4 +1,5 @@
 import Router from "@koa/router";
+import { validUploadGiB } from "../service/nomad_policy";
 import formidable from "formidable";
 import * as fs from "fs-extra";
 import path from "path";
@@ -40,8 +41,13 @@ router.get("/setting", permission({ level: ROLE.ADMIN }), async (ctx) => {
 router.put("/setting", permission({ level: ROLE.ADMIN }), async (ctx) => {
   const config = ctx.request.body as Partial<SystemConfig>;
   if (config && systemConfig) {
+    if (config.nomadPackageUploadGiB !== undefined && !validUploadGiB(config.nomadPackageUploadGiB)) { ctx.status = 400; ctx.body = "invalid_upload_limit"; return; }
+    for(const key of ["nomadRelayPublicHost", "nomadRelayBindIp"] as const){if(config[key] !== undefined && (typeof config[key] !== "string" || !/^[a-z0-9.\-:]{1,255}$/i.test(config[key]!))){ctx.status=400;ctx.body="invalid_server_address";return;}}
+    if(config.nomadRelayPublicHost !== undefined)systemConfig.nomadRelayPublicHost=config.nomadRelayPublicHost;
+    if(config.nomadRelayBindIp !== undefined)systemConfig.nomadRelayBindIp=config.nomadRelayBindIp;
     // Snapshot for the audit log (masked diff is computed after all mutations)
     const systemConfigBefore = JSON.parse(JSON.stringify(systemConfig)) as SystemConfig;
+    if (config.nomadPackageUploadGiB != null) systemConfig.nomadPackageUploadGiB = config.nomadPackageUploadGiB;
     if (config.httpIp != null) systemConfig.httpIp = config.httpIp;
     if (config.httpPort != null) systemConfig.httpPort = config.httpPort;
     if (config.prefix != null) systemConfig.prefix = config.prefix;

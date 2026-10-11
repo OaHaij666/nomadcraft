@@ -4,18 +4,13 @@ import {
   type SidebarAppDropdownEntry,
   type SidebarEntry
 } from "@/hooks/useHeaderMenus";
-import { useAppConfigStore } from "@/stores/useAppConfigStore";
 import {
   ApartmentOutlined,
   AppstoreOutlined,
   AreaChartOutlined,
-  LinkOutlined,
-  LoginOutlined,
   MenuOutlined,
   SettingOutlined,
-  ShopOutlined,
-  TeamOutlined,
-  UserOutlined
+  TeamOutlined
 } from "@ant-design/icons-vue";
 import type { Key } from "ant-design-vue/es/table/interface";
 import type { Component } from "vue";
@@ -23,7 +18,6 @@ import { useRoute } from "vue-router";
 
 const route = useRoute();
 const { sidebarItems, handleToPage } = useHeaderMenus();
-const { logoImage } = useAppConfigStore();
 
 /** Whether route menu item is active (current path equals or is child of this path) */
 const isRouteActive = (path: string): boolean => {
@@ -34,15 +28,13 @@ const isRouteActive = (path: string): boolean => {
 
 /** Sidebar icon for each route path */
 const routePathIcons: Record<string, Component> = {
+  "/catalog": AppstoreOutlined,
   "/instances": AppstoreOutlined,
-  "/market": ShopOutlined,
   "/overview": AreaChartOutlined,
   "/users": TeamOutlined,
   "/node": ApartmentOutlined,
   "/settings": SettingOutlined,
-  "/customer": UserOutlined,
-  "/login": LoginOutlined,
-  "/_open_page": LinkOutlined
+  "/customer": AppstoreOutlined
 };
 
 const getRouteIcon = (path: string): Component => {
@@ -63,7 +55,7 @@ const onAppDropdownClick = (item: SidebarAppDropdownEntry, info: { key: Key }) =
 <template>
   <aside class="left-sidebar">
     <a href="." class="logo">
-      <img :src="logoImage" />
+      <span class="sidebar-wordmark">NomadCraft</span>
     </a>
     <nav class="sidebar-menu">
       <template v-for="(entry, index) in sidebarItems" :key="getItemKey(entry, index)">
@@ -112,6 +104,10 @@ const onAppDropdownClick = (item: SidebarAppDropdownEntry, info: { key: Key }) =
 </template>
 
 <style lang="scss" scoped>
+.sidebar-wordmark {
+  font: 600 21px var(--nc-font-display);
+  color: var(--nc-parchment);
+}
 @import "@/assets/nomad-theme.scss";
 
 // The rail is the product's spine. It stays quiet: no background image, no
@@ -154,10 +150,6 @@ const onAppDropdownClick = (item: SidebarAppDropdownEntry, info: { key: Key }) =
       transparent
     );
   }
-}
-
-.left-sidebar:hover {
-  width: 246px;
 }
 
 .sidebar-menu {

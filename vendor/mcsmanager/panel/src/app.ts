@@ -1,4 +1,5 @@
 import fs from "fs-extra";
+import {initHostRelay} from "./app/service/nomad_host_relay";
 import http from "http";
 import https from "https";
 import Koa from "koa";
@@ -58,6 +59,7 @@ function setupHttp(
     process.exit(1);
   });
 
+  initHostRelay(httpServer);
   httpServer.listen(port, host);
   logger.info("==================================");
   logger.info($t("TXT_CODE_app.panelStarted"));
@@ -152,8 +154,7 @@ _  /  / / / /___  ____/ /_  /  / / / /_/ /_  / / / /_/ /_  /_/ //  __/  /
   });
 
   app.use(preCheckMiddleware);
-  app.use(
-    koaBody({
+  const standardBody = koaBody({
       multipart: true,
       parsedMethods: [
         HttpMethodEnum.GET,
@@ -169,8 +170,17 @@ _  /  / / / /___  ____/ /_  /  / / / /_/ /_  / / / /_/ /_  /_/ //  __/  /
       onError(err, ctx) {
         logger.error("koaBody Lib Error:", err);
       }
-    })
-  );
+    });
+  app.use(async (ctx, next) => {
+    const policy = ctx.state.nomadUploadPolicy;
+    if (!policy) return standardBody(ctx, next);
+    try {
+      await koaBody({multipart: true, parsedMethods: [HttpMethodEnum.POST], formidable: {maxFileSize: policy.maxBytes, maxTotalFileSize: policy.maxBytes, maxFiles: 1, maxFields: 20, maxFieldsSize: 65536}, jsonLimit: "10mb"})(ctx, next);
+    } catch (error: any) {
+      if (Number(error?.httpCode) === 413) { ctx.status = 413; ctx.type = "application/json"; ctx.body = JSON.stringify({status: 413, data: "package_too_large", time: Date.now()}); return; }
+      throw error;
+    }
+  });
 
   app.keys = [v4()];
   app.use(
@@ -188,6 +198,26 @@ _  /  / / / /___  ____/ /_  /  / / / /_/ /_  / / / /_/ /_  /_/ //  __/  /
       app
     )
   );
+
+  // The bundled KAMUCL panel runs from kamucl-panel://local while its API
+  // remains on the configured NomadCraft server. Allow only that embedded
+  // origin; requests are authenticated with the short-lived query token.
+  app.use(async (ctx, next) => {
+    const origin = ctx.get("Origin");
+    if (origin.startsWith("kamucl-panel://")) {
+      ctx.set("Access-Control-Allow-Origin", origin);
+      ctx.set("Access-Control-Allow-Credentials", "true");
+      ctx.set("Access-Control-Allow-Headers", "Content-Type, X-Requested-With, X-Request-Api-Key, Authorization");
+      ctx.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+      ctx.set("Access-Control-Expose-Headers", "Content-Disposition, X-Nomad-SHA256");
+      ctx.set("Vary", "Origin");
+      if (ctx.method === "OPTIONS") {
+        ctx.status = 204;
+        return;
+      }
+    }
+    await next();
+  });
 
   app.use(async (ctx, next) => {
     const ignoreUrls = ["/api/overview", "/api/files/status"];

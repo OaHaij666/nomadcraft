@@ -23,9 +23,13 @@ import settingsRouter from "./routers/settings_router";
 import ssoRouter from "./routers/sso_router";
 import upgradeRouter from "./routers/upgrade_router";
 import userRouter from "./routers/user_overview_router";
+import nomadHostingRouter from "./routers/nomad_hosting_router";
+import nomadCatalogRouter from "./routers/nomad_catalog_router";
 
 export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   const apiRouter = new Router({ prefix: "/api" });
+  apiRouter.use(nomadHostingRouter.routes()).use(nomadHostingRouter.allowedMethods());
+  apiRouter.use(nomadCatalogRouter.routes()).use(nomadCatalogRouter.allowedMethods());
   apiRouter.use(overviewRouter.routes()).use(overviewRouter.allowedMethods());
   apiRouter.use(userInstanceRouter.routes()).use(userInstanceRouter.allowedMethods());
   apiRouter.use(instanceRouter.routes()).use(instanceRouter.allowedMethods());

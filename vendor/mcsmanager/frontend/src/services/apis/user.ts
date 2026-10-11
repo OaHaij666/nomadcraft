@@ -41,3 +41,12 @@ export const confirm2FA = useDefineApi<
   url: "/api/auth/confirm2fa",
   method: "POST"
 });
+
+export const getHostingPreference = useDefineApi<
+  {},
+  import("../../../../shared/nomad-hosting-preference").HostingPreference
+>({ url: "/api/auth/hosting-preference", method: "GET" });
+export const setHostingPreference = useDefineApi<
+  { data: import("../../../../shared/nomad-hosting-preference").HostingPreference },
+  import("../../../../shared/nomad-hosting-preference").HostingPreference
+>({ url: "/api/auth/hosting-preference", method: "PUT" });

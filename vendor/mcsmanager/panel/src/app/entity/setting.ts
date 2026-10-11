@@ -1,5 +1,8 @@
 // @Entity
 export default class SystemConfig {
+  nomadPackageUploadGiB = 5;
+  nomadRelayPublicHost = "127.0.0.1";
+  nomadRelayBindIp = "127.0.0.1";
   // HTTP service port, IP and path prefix
   httpPort: number = 23333;
   httpIp: string = "";

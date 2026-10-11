@@ -1,0 +1,6 @@
+Dwinovo/minecraft-numen
+https://github.com/Dwinovo/minecraft-numen
+Revision: 2df6979ec33ae45edd623c512ee6644dd94ef11a
+Branch: 1.21.1
+License: LGPL-3.0-only (see ../LGPL-3.0.txt and ../GPL-3.0.txt)
+Original source retained without changes. Launcher adaptations: src/main/core/numen/harness.ts and prompt.ts.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import CardPanel from "@/components/CardPanel.vue";
+import WorldArtwork from "@/widgets/worlds/WorldArtwork.vue";
+import { useAppStateStore } from "@/stores/useAppStateStore";
 import { openInstanceTagsEditor, useDeleteInstanceDialog } from "@/components/fc/index";
 import { useAppRouters } from "@/hooks/useAppRouters";
 import { useLayoutCardTools } from "@/hooks/useCardTools";
@@ -12,19 +13,16 @@ import {
   stopInstance,
   updateInstance
 } from "@/services/apis/instance";
-import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import { arrayFilter } from "@/tools/array";
 import { formatMemoryUsage } from "@/tools/memory";
 import { parseTimestamp } from "@/tools/time";
 import { reportErrorMsg } from "@/tools/validator";
 import type { InstanceDetail, LayoutCard } from "@/types/index";
 import {
-  CheckCircleOutlined,
   CloseOutlined,
   CloudDownloadOutlined,
   CodeOutlined,
   DeleteOutlined,
-  ExclamationCircleOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   RedoOutlined,
@@ -33,8 +31,7 @@ import {
 } from "@ant-design/icons-vue";
 import { message, Modal } from "ant-design-vue";
 import _ from "lodash";
-import prettyBytes, { type Options as PrettyOptions } from "pretty-bytes";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 const props = defineProps<{
   card: LayoutCard;
@@ -43,20 +40,19 @@ const props = defineProps<{
 }>();
 
 const emits = defineEmits(["refreshList"]);
+const { isAdmin } = useAppStateStore();
 
-const { containerState } = useLayoutContainerStore();
 const { getMetaOrRouteValue } = useLayoutCardTools(props.card);
 const { toPage } = useAppRouters();
 const instanceId = props.targetInstanceInfo?.instanceUuid || getMetaOrRouteValue("instanceId");
 const daemonId = props.targetDaemonId || getMetaOrRouteValue("daemonId");
 
-const { statusText, isRunning, isStopped, instanceTypeText, instanceInfo, isStarting } =
-  useInstanceInfo({
-    instanceId: props.targetInstanceInfo ? undefined : instanceId,
-    daemonId: props.targetInstanceInfo ? undefined : daemonId,
-    autoRefresh: props.targetInstanceInfo ? false : true,
-    instanceInfo: props.targetInstanceInfo ? ref(props.targetInstanceInfo) : undefined
-  });
+const { statusText, isRunning, isStopped, instanceTypeText, instanceInfo } = useInstanceInfo({
+  instanceId: props.targetInstanceInfo ? undefined : instanceId,
+  daemonId: props.targetInstanceInfo ? undefined : daemonId,
+  autoRefresh: props.targetInstanceInfo ? false : true,
+  instanceInfo: props.targetInstanceInfo ? computed(() => props.targetInstanceInfo) : undefined
+});
 
 const operationConfig = {
   params: {
@@ -70,30 +66,6 @@ const { isLoading: stopLoading, execute: executeStop } = stopInstance();
 const { isLoading: restartLoading, execute: executeRestart } = restartInstance();
 const { isLoading: killLoading, execute: executeKill } = killInstance();
 const { isLoading: updateLoading, execute: executeUpdate } = updateInstance();
-
-const prettyBytesConfig: PrettyOptions = {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  binary: true
-};
-
-const formatStorageUsage = (usage?: number, limit?: number) => {
-  const fUsage = prettyBytes(usage ?? 0, prettyBytesConfig);
-  const fLimit = prettyBytes(limit ?? 0, prettyBytesConfig);
-  return limit ? `${fUsage} / ${fLimit}` : fUsage;
-};
-
-const formatNetworkSpeed = (bytes?: number) =>
-  prettyBytes(bytes ?? 0, {
-    ...prettyBytesConfig,
-    binary: false
-  }) + "/s";
-
-const formatTrafficUsage = (bytes?: number) =>
-  prettyBytes(bytes ?? 0, {
-    ...prettyBytesConfig,
-    binary: false
-  });
 
 const refreshList = () => {
   setTimeout(() => {
@@ -160,7 +132,6 @@ const instanceOperations = computed(() =>
         await execInstanceAction(event, "start");
       },
       loading: openLoading.value,
-      disabled: containerState.isDesignMode,
       condition: () => isStopped.value
     },
     {
@@ -178,7 +149,6 @@ const instanceOperations = computed(() =>
         return false;
       },
       loading: stopLoading.value,
-      disabled: containerState.isDesignMode,
       condition: () => isRunning.value
     },
     {
@@ -195,7 +165,6 @@ const instanceOperations = computed(() =>
         });
       },
       loading: restartLoading.value,
-      disabled: containerState.isDesignMode,
       condition: () => isRunning.value
     },
     {
@@ -206,7 +175,6 @@ const instanceOperations = computed(() =>
         execInstanceAction(event, "update");
       },
       loading: updateLoading.value,
-      disabled: containerState.isDesignMode,
       condition: () => isStopped.value
     },
     {
@@ -223,7 +191,6 @@ const instanceOperations = computed(() =>
         });
       },
       loading: killLoading.value,
-      disabled: containerState.isDesignMode,
       danger: true,
       condition: () => !isStopped.value
     },
@@ -240,8 +207,7 @@ const instanceOperations = computed(() =>
           const newTags = await openInstanceTagsEditor(instanceId, daemonId, tags);
           if (!_.isEqual(newTags, tags)) refreshList();
         }
-      },
-      disabled: containerState.isDesignMode
+      }
     },
     {
       title: t("TXT_CODE_524e3036"),
@@ -255,11 +221,11 @@ const instanceOperations = computed(() =>
             instanceId
           }
         });
-      },
-      disabled: containerState.isDesignMode
+      }
     },
     {
       title: t("TXT_CODE_a0e19f38"),
+      condition: () => isAdmin.value,
       icon: DeleteOutlined,
       click: async (event: MouseEvent) => {
         event.stopPropagation();
@@ -271,175 +237,150 @@ const instanceOperations = computed(() =>
         message.success(t("TXT_CODE_f486dbb4"));
         refreshList();
       },
-      danger: true,
-      disabled: containerState.isDesignMode
+      danger: true
     }
   ])
 );
+
+const openWorld = () => toPage({ path: "/instances/terminal", query: { daemonId, instanceId } });
 </script>
 
 <template>
-  <CardPanel style="width: 100%; height: 100%; position: relative">
-    <template #title>
-      {{ instanceInfo?.config.nickname }}
-    </template>
-    <template #operator> </template>
-    <template #body>
-      <div class="instance-card-body">
-        <a-typography-paragraph>
-          <div class="mb-8 flex" style="flex-wrap: wrap; gap: 8px">
-            <a-tag
-              class="m-0"
-              :color="isRunning ? 'green' : isStarting ? 'pink' : ''"
-              :style="{
-                opacity: isRunning || isStarting ? '1' : '0.5'
-              }"
-            >
-              <span v-if="isRunning">
-                <CheckCircleOutlined />
-                {{ statusText }}
-              </span>
-              <span v-else-if="isStopped">
-                <ExclamationCircleOutlined />
-                {{ statusText }}
-              </span>
-              <span v-else>
-                <ExclamationCircleOutlined />
-                {{ statusText }}
-              </span>
-            </a-tag>
-
-            <div v-if="instanceInfo?.config.tag && instanceInfo?.config.tag.length > 0">|</div>
-            <a-tag v-for="item in instanceInfo?.config.tag" :key="item" class="m-0">
-              {{ item }}
-            </a-tag>
-          </div>
-          <div class="instance-info-line">
-            <span class="title">{{ t("TXT_CODE_2f291d8b") }}:</span>
-            <span class="value"> {{ instanceTypeText }}</span>
-          </div>
-          <div class="instance-info-line">
-            <span class="title">{{ t("TXT_CODE_34611898") }}:</span>
-            <span class="value"> {{ parseTimestamp(instanceInfo?.config.lastDatetime) }}</span>
-          </div>
-          <div v-if="instanceInfo?.config.endTime" class="instance-info-line">
-            <span class="title">{{ t("TXT_CODE_fa920c0") }}:</span>
-            <span> {{ parseTimestamp(instanceInfo?.config.endTime) }}</span>
-          </div>
-          <div
-            v-if="instanceInfo?.info.memoryUsage && instanceInfo?.config?.processType !== 'docker'"
-            class="instance-info-line"
-          >
-            <span class="title">{{ t("TXT_CODE_593ee330") }}:</span>
-            <span class="value">
-              {{
-                formatMemoryUsage(instanceInfo?.info.memoryUsage, instanceInfo?.info.memoryLimit)
-              }}
-            </span>
-          </div>
-          <template v-if="instanceInfo?.config?.processType === 'docker'">
-            <div v-if="instanceInfo?.info.cpuUsage != null" class="instance-info-line">
-              <span class="title">{{ t("TXT_CODE_b862a158") }}:</span>
-              <span class="value">{{ parseInt(String(instanceInfo?.info.cpuUsage)) }}%</span>
-            </div>
-            <div v-if="instanceInfo?.info.memoryUsage != null" class="instance-info-line">
-              <span class="title">{{ t("TXT_CODE_593ee330") }}:</span>
-              <span class="value">
-                {{
-                  formatMemoryUsage(instanceInfo?.info.memoryUsage, instanceInfo?.info.memoryLimit)
-                }}
-              </span>
-            </div>
-            <div v-if="instanceInfo?.info.storageUsage != null" class="instance-info-line">
-              <span class="title">{{ t("TXT_CODE_DISK_USAGE") }}:</span>
-              <span class="value">
-                {{
-                  formatStorageUsage(
-                    instanceInfo?.info.storageUsage,
-                    instanceInfo?.info.storageLimit
-                  )
-                }}
-              </span>
-            </div>
-            <div
-              v-if="instanceInfo?.info.rxRate != null || instanceInfo?.info.txRate != null"
-              class="instance-info-line"
-            >
-              <span class="title"> {{ t("TXT_CODE_network_bandwidth") }}: </span>
-              <span class="value">
-                ↓{{ formatNetworkSpeed(instanceInfo?.info.rxRate) }} ↑{{
-                  formatNetworkSpeed(instanceInfo?.info.txRate)
-                }}
-              </span>
-            </div>
-          </template>
-          <div v-if="instanceInfo?.info.mcPingOnline" class="instance-info-line">
-            <span class="title">{{ t("TXT_CODE_e4dce83f") }}:</span>
-            <span class="value" style="vertical-align: middle">
-              <UserOutlined />
-              {{ instanceInfo?.info.currentPlayers }} / {{ instanceInfo?.info.maxPlayers }}
-            </span>
-          </div>
-        </a-typography-paragraph>
-
-        <a-space warp :size="6" class="mb-4">
-          <div v-for="item in instanceOperations" :key="item.title">
-            <a-divider v-if="item.area" type="vertical" />
-            <a-tooltip v-else :title="item.title">
+  <article class="world-card" :class="{ live: isRunning }">
+    <WorldArtwork :seed="instanceId ?? ''" />
+    <div class="world-card-content">
+      <div class="world-card-top">
+        <span class="world-status" :class="{ online: isRunning }"><i></i>{{ statusText }}</span><span class="world-type">{{ instanceTypeText }}</span>
+      </div>
+      <button class="world-title" type="button" @click="openWorld">
+        {{ instanceInfo?.config.nickname || instanceId }}
+      </button>
+      <div class="world-tags">
+        <a-tag v-for="tag in instanceInfo?.config.tag" :key="tag">{{ tag }}</a-tag>
+      </div>
+      <div class="world-metrics">
+        <span v-if="instanceInfo?.info.mcPingOnline"><UserOutlined /> {{ instanceInfo.info.currentPlayers }} /
+          {{ instanceInfo.info.maxPlayers }}</span>
+        <span v-if="instanceInfo?.info.memoryUsage != null">{{
+          formatMemoryUsage(instanceInfo.info.memoryUsage, instanceInfo.info.memoryLimit)
+        }}</span>
+        <span v-if="!isRunning">{{
+          instanceInfo?.config.lastDatetime
+            ? parseTimestamp(instanceInfo.config.lastDatetime)
+            : t("TXT_CODE_WORLD_NEVER_STARTED")
+        }}</span>
+      </div>
+      <div class="world-actions">
+        <a-button class="enter-world" @click="openWorld">{{ t("TXT_CODE_WORLD_OPEN") }} →</a-button><a-space :size="4">
+          <template v-for="item in instanceOperations" :key="item.title">
+            <a-tooltip v-if="!item.area && item.icon !== CodeOutlined" :title="item.title">
               <a-button
                 size="small"
+                :aria-label="item.title"
                 :loading="item.loading"
-                :disabled="item.disabled"
                 :danger="item.danger"
                 @click="item.click"
               >
-                <component :is="item.icon" style="font-size: 13px"></component>
+                <component :is="item.icon" />
               </a-button>
             </a-tooltip>
-          </div>
+          </template>
         </a-space>
       </div>
-    </template>
-  </CardPanel>
+    </div>
+  </article>
 </template>
 
-<style clang="scss" scoped>
-.instance-card {
-  cursor: pointer;
-  min-height: 170px;
-  transition: border 0.3s ease;
-}
-.instance-card:hover {
-  border: 1px solid var(--color-gray-8);
-  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.16);
-}
-.instance-tag-container {
-  margin-left: -4px;
-  margin-right: -4px;
-}
-.group-name-tag {
-  margin: 4px;
-}
-
-.instance-card-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+<style scoped>
+.world-card {
+  background: var(--nc-dusk);
+  border: var(--nc-hairline);
+  border-radius: 12px;
+  overflow: hidden;
   height: 100%;
+  text-align: left;
 }
-
-.instance-info-line {
+.world-card.live {
+  border-color: var(--nc-aurora-dim);
+}
+.world-card-content {
+  padding: 22px;
+}
+.world-card-top {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--nc-mist);
+}
+.world-status {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
-
-  .title {
-    margin-right: 10px;
-  }
-
-  .value {
-    opacity: 0.8;
-  }
+  gap: 6px;
+  white-space: nowrap;
+}
+.world-status i {
+  width: 6px;
+  height: 6px;
+  background: var(--nc-faint);
+  border-radius: 50%;
+}
+.world-status.online {
+  color: var(--nc-aurora);
+}
+.world-status.online i {
+  background: var(--nc-aurora);
+}
+.world-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.world-title {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--nc-parchment);
+  font: 600 21px var(--nc-font-display);
+  text-align: left;
+  margin: 15px 0 10px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.world-tags {
+  min-height: 24px;
+}
+.world-tags :deep(.ant-tag) {
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.world-metrics {
+  min-height: 26px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--nc-mist);
+  margin: 16px 0 20px;
+}
+.world-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  border-top: var(--nc-hairline);
+  padding-top: 16px;
+}
+.enter-world {
+  border: 0;
+  background: none;
+  padding-left: 0;
+  box-shadow: none;
+  color: var(--nc-parchment);
+}
+.world-title:focus-visible {
+  outline: 2px solid var(--nc-aurora);
+  outline-offset: 4px;
 }
 </style>

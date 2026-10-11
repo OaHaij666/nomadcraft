@@ -135,3 +135,31 @@
 .nc-world-card[data-state="asleep"]:hover {
   opacity: 1;
 }
+
+// Connect product surfaces to the inherited component styles.
+.app-dark-theme {
+  --background-color: var(--nc-ink);
+  --background-color-white: var(--nc-dusk);
+  --text-color: var(--nc-parchment);
+  --card-border-color: rgba(232, 228, 217, 0.1);
+  --app-header-bg: var(--nc-ink);
+  --login-panel-bg: var(--nc-dusk);
+}
+.app-light-theme {
+  --nc-ink: #f2f0eb;
+  --nc-dusk: #faf9f5;
+  --nc-haze: #e9e6df;
+  --nc-veil: #d4d0c6;
+  --nc-parchment: #272838;
+  --nc-mist: #676575;
+  --nc-faint: #8b8897;
+  --nc-aurora: #34756e;
+  --nc-aurora-dim: #559188;
+  --nc-hairline: 1px solid rgba(39, 40, 56, 0.12);
+  --nc-hairline-strong: 1px solid rgba(39, 40, 56, 0.23);
+  --background-color: var(--nc-ink);
+  --background-color-white: var(--nc-dusk);
+  --text-color: var(--nc-parchment);
+  --app-header-bg: var(--nc-ink);
+  --login-panel-bg: var(--nc-dusk);
+}

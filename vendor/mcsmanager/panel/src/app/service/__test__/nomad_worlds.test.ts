@@ -1,0 +1,12 @@
+import {beforeEach,afterEach,describe,expect,it} from "vitest";
+import fs from "fs/promises";import path from "path";import os from "os";import crypto from "crypto";import * as yazl from "yazl";import {NomadWorlds,inspectWorldArchive} from "../nomad_worlds";
+let dir:string;
+beforeEach(async()=>{dir=await fs.mkdtemp(path.join(os.tmpdir(),"nomad-world-test-"));});
+afterEach(async()=>{if(path.dirname(dir)===os.tmpdir()&&path.basename(dir).startsWith("nomad-world-test-"))await fs.rm(dir,{recursive:true,force:true});});
+async function archive(files:Record<string,string>){const z=new yazl.ZipFile();for(const[name,body]of Object.entries(files))z.addBuffer(Buffer.from(body),name);const chunks:Buffer[]=[];const complete=new Promise<Buffer>((resolve,reject)=>{z.outputStream.on("data",c=>chunks.push(c));z.outputStream.on("end",()=>resolve(Buffer.concat(chunks)));z.outputStream.on("error",reject);});z.end();const file=path.join(dir,"world.zip");await fs.writeFile(file,await complete);return file;}
+describe("canonical world archive receipts",()=>{
+ it("validates a world and stores immutable verified bytes",async()=>{const file=await archive({"world/level.dat":"level","world/region/r.0.0.mca":"region"}),worlds=new NomadWorlds(path.join(dir,"blobs"));const result=await worlds.store(file);const bytes=await fs.readFile(worlds.path(result.sha256));expect(crypto.createHash("sha256").update(bytes).digest("hex")).toBe(result.sha256);expect(await worlds.store(file)).toEqual(result);});
+ it("streams multi-megabyte region entries without stalling under backpressure",async()=>{const body=crypto.randomBytes(2*1024*1024).toString("base64");const file=await archive({"world/level.dat":"level","world/region/r.0.0.mca":body});expect((await inspectWorldArchive(file)).size).toBeGreaterThan(1024*1024);});
+ it("rejects policy/config injection even in an otherwise valid world",async()=>{const file=await archive({"world/level.dat":"level","ops.json":"[{admin:true}]"});await expect(inspectWorldArchive(file)).rejects.toMatchObject({code:"invalid_world_archive"});});
+ it("rejects incomplete and case-alias archives",async()=>{await expect(inspectWorldArchive(await archive({"world/data/a":"a"}))).rejects.toMatchObject({code:"world_level_missing"});await expect(inspectWorldArchive(await archive({"world/level.dat":"level","world/LEVEL.DAT":"duplicate"}))).rejects.toMatchObject({code:"invalid_world_archive"});});
+});

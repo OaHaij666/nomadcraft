@@ -73,6 +73,8 @@ export default defineConfig({
     vue(),
     vueJsx(),
     Components({
+      // Keep checked-in declarations stable during concurrent build/type checking.
+      dts: false,
       resolvers: [
         AntDesignVueResolver({
           importStyle: false // css in js

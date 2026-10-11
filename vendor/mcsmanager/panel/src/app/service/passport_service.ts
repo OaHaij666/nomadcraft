@@ -22,6 +22,34 @@ export const ILLEGAL_ACCESS_KEY = "illegalAccess";
 export const LOGIN_COUNT = "loginCount";
 export const LOGIN_FAILED_COUNT_KEY = "loginFailedCount";
 
+// KAMUCL embeds the panel in an Electron iframe. Chromium may reject the
+// panel's HttpOnly session cookie in that third-party iframe, so the existing
+// session token is also accepted as a bearer credential for API requests.
+// The map is deliberately process-local and expires with the normal session
+// lifetime; it never stores passwords or exposes user data to the client.
+const EMBEDDED_TOKEN_TTL = 86400000;
+const embeddedTokens = new Map<string, { uuid: string; userName: string; expiresAt: number }>();
+
+function rememberEmbeddedToken(token: string, user: User): void {
+  embeddedTokens.set(token, { uuid: user.uuid, userName: user.userName, expiresAt: Date.now() + EMBEDDED_TOKEN_TTL });
+}
+
+function embeddedTokenUser(ctx: Koa.ParameterizedContext): User | undefined {
+  const token = typeof ctx.query.token === "string" ? ctx.query.token : "";
+  if (!token) return undefined;
+  const entry = embeddedTokens.get(token);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    embeddedTokens.delete(token);
+    return undefined;
+  }
+  return userSystem.getInstance(entry.uuid) || undefined;
+}
+
+function forgetEmbeddedToken(token?: string): void {
+  if (token) embeddedTokens.delete(token);
+}
+
 export function login(
   ctx: Koa.ParameterizedContext,
   userName: string,
@@ -68,6 +96,7 @@ export function loginSuccess(ctx: Koa.ParameterizedContext, userName: string) {
   ctx.session["uuid"] = user.uuid;
   ctx.session["role"] = user.permission === 10 ? ROLE.ADMIN : ROLE.USER;
   ctx.session["token"] = timeUuid();
+  rememberEmbeddedToken(String(ctx.session["token"]), user);
   ctx.session.save();
 
   logger.info($t("TXT_CODE_42036f92"));
@@ -113,6 +142,7 @@ export function check(ctx: Koa.ParameterizedContext) {
 
 export function logout(ctx: Koa.ParameterizedContext): boolean {
   if (!ctx.session) return false;
+  forgetEmbeddedToken(String(ctx.session["token"] || ctx.query.token || ""));
   ctx.session["login"] = null;
   ctx.session["userName"] = null;
   ctx.session["uuid"] = null;
@@ -155,7 +185,7 @@ export function getUserPermission(ctx: Koa.ParameterizedContext): number {
   if (isApiRequest(ctx)) {
     user = getUuidByApiKey(getApiKey(ctx));
   } else {
-    user = userSystem.getInstance(ctx.session?.["uuid"] || "");
+    user = embeddedTokenUser(ctx) || userSystem.getInstance(ctx.session?.["uuid"] || "");
   }
   if (!user) return 0;
   return user.permission ?? 0;
@@ -166,7 +196,7 @@ export function getUserNameBySession(ctx: Koa.ParameterizedContext): string {
     const user = getUuidByApiKey(getApiKey(ctx));
     return user ? user.userName : "";
   }
-  return ctx.session?.["userName"];
+  return embeddedTokenUser(ctx)?.userName || ctx.session?.["userName"];
 }
 
 export function getUserFromCtx(ctx: Koa.ParameterizedContext) {
@@ -175,7 +205,7 @@ export function getUserFromCtx(ctx: Koa.ParameterizedContext) {
       const user = getUuidByApiKey(getApiKey(ctx));
       return user || undefined;
     }
-    return userSystem.getInstance(ctx.session?.["uuid"] || "") || undefined;
+    return embeddedTokenUser(ctx) || userSystem.getInstance(ctx.session?.["uuid"] || "") || undefined;
   } catch (error) {
     return undefined;
   }
@@ -190,11 +220,11 @@ export function getUserUuid(ctx: Koa.ParameterizedContext): string {
       return "";
     }
   }
-  return ctx.session?.["uuid"] || "";
+  return embeddedTokenUser(ctx)?.uuid || ctx.session?.["uuid"] || "";
 }
 
 export function getToken(ctx: Koa.ParameterizedContext): string {
-  return ctx.session?.["token"] || "";
+  return (typeof ctx.query.token === "string" && ctx.query.token) || ctx.session?.["token"] || "";
 }
 
 export function isAjax(ctx: Koa.ParameterizedContext) {

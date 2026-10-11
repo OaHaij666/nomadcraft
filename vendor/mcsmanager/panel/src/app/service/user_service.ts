@@ -1,3 +1,4 @@
+import type {HostingWillingness} from "../../../../shared/nomad-hosting-preference";
 import bcrypt from "bcryptjs";
 import { t } from "i18next";
 import { LocalFileSource, QueryWrapper } from "mcsmanager-common";
@@ -84,6 +85,13 @@ class UserSubsystem {
       instance.passWord = bcrypt.hashSync(config.passWord, 10);
     }
     await Storage.getStorage().store("User", uuid, instance);
+  }
+
+  async setHostingWillingness(uuid: string, value: HostingWillingness) {
+    const user = this.getInstance(uuid);
+    if (!user) throw new Error("User not found");
+    await Storage.getStorage().store("User", uuid, {...user, hostingWillingness: value});
+    user.hostingWillingness = value;
   }
 
   validatePassword(password = "") {

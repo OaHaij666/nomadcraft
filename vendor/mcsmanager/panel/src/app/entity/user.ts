@@ -1,3 +1,4 @@
+import {DEFAULT_HOSTING_WILLINGNESS,type HostingWillingness} from "../../../../shared/nomad-hosting-preference";
 import { IUser } from "./entity_interface";
 
 export enum UserPassWordType {
@@ -18,6 +19,7 @@ export class User implements IUser {
   passWordType: number = UserPassWordType.bcrypt;
   salt: string = "";
   permission: number = 0;
+  hostingWillingness: HostingWillingness = DEFAULT_HOSTING_WILLINGNESS;
   registerTime: string = "";
   loginTime: string = "";
   instances: Array<IUserApp> = [];

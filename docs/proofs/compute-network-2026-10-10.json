@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-10T14:11:22.734Z",
+  "minecraft": "1.20.1",
+  "java": 21,
+  "firstEpoch": 1,
+  "secondEpoch": 2,
+  "checks": [
+    "automatic fixed server dispatch",
+    "automatic player node dispatch",
+    "distinct local and public TCP mapping",
+    "network self-check native protocol response",
+    "honest external verification status",
+    "real vanilla process",
+    "center outbound WebSocket relay",
+    "server status",
+    "native allowlisted login (isolated offline test)",
+    "no implicit OP",
+    "exclusive host lease",
+    "periodic consistent checkpoint",
+    "graceful stop and final commit",
+    "fresh executor canonical-world restore",
+    "restored room reachable"
+  ],
+  "onlineMicrosoftLoginTested": false,
+  "publicPort": 54583,
+  "bindPort": 54581,
+  "physicalCrossMachineTested": false
+}

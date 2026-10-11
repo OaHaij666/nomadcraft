@@ -2,7 +2,7 @@ import Koa from "koa";
 import { GlobalVariable } from "mcsmanager-common";
 import { ROLE } from "../entity/user";
 import { $t } from "../i18n";
-import { getUuidByApiKey, ILLEGAL_ACCESS_KEY, isAjax, logout } from "../service/passport_service";
+import { getUserFromCtx, getUuidByApiKey, ILLEGAL_ACCESS_KEY, isAjax, logout } from "../service/passport_service";
 import userSystem from "../service/user_service";
 import { systemConfig } from "../setting";
 import { isUnsafeIntegrationTestRequest } from "../utils/integration_test_mode";
@@ -111,9 +111,12 @@ export default (parameter: IPermissionCfg) => {
     // If the route requires Token verification, it will be verified, the default is automatic verification
     if (parameter.token !== false) {
       if (!isAjax(ctx)) return ajaxError(ctx);
-      const requestToken = ctx.query.token;
+      const requestToken = typeof ctx.query.token === "string" ? ctx.query.token : "";
       const realToken = ctx.session?.["token"];
-      if (requestToken !== realToken) {
+      // Normal browser sessions still use the signed cookie. Embedded
+      // KAMUCL requests carry the same bearer token in the query string;
+      // getUserFromCtx resolves it through the short-lived server-side map.
+      if (requestToken !== realToken && !getUserFromCtx(ctx)) {
         return tokenError(ctx);
       }
     }
@@ -121,8 +124,8 @@ export default (parameter: IPermissionCfg) => {
     // If the permission attribute is a number, the permission determination is automatically executed
     if (!isNaN(parseInt(String(parameter.level)))) {
       // The most basic authentication decision
-      if (ctx.session?.["login"] === true && ctx.session["uuid"] && ctx.session["userName"]) {
-        const user = userSystem.getInstance(ctx.session["uuid"]);
+      const user = getUserFromCtx(ctx);
+      if (user && (ctx.session?.["login"] === true || typeof ctx.query.token === "string")) {
 
         // ban check
         if (user && user.permission < 0) {

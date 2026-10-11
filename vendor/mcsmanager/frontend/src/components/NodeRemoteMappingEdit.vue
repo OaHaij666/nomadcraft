@@ -45,7 +45,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits({
-  "update:value": (value: RemoteMappingItem[]) => null
+  "update:value": (value: RemoteMappingItem[]) => Array.isArray(value)
 });
 
 const remoteMappings = useVModel(props, "value", emit);

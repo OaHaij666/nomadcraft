@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/DrAbcOfficial/YSMViewer",
+  "revision": "a30baf27425a9cc206af095600e3d98e4eb7f472",
+  "license": "GPL-3.0",
+  "files": [
+    {
+      "upstream": "YSMViewer.Browser/wwwroot/ysm-three-renderer.js",
+      "local": "src/renderer/public/ysmviewer/ysm-three-renderer.js",
+      "sha256": "3bb1f44d53911b008fcbc0a47b4a3db01632232b7fece263404a01e24665635f"
+    },
+    {
+      "upstream": "YSMViewer.Browser/wwwroot/three.module.min.js",
+      "local": "src/renderer/public/ysmviewer/three.module.min.js",
+      "sha256": "08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7"
+    },
+    {
+      "upstream": "YSMViewer.Browser/wwwroot/OrbitControls.js",
+      "local": "src/renderer/public/ysmviewer/OrbitControls.js",
+      "sha256": "ffd1b1b60faba0f58733cba10dae5c828a97b1232593bca43b06e759e05fb071"
+    },
+    {
+      "upstream": "YSMViewer.Browser/Rendering/ThreeJs/ThreeJsPayloadBuilder.cs",
+      "local": "ysm-engine/ThreeJsPayloadBuilder.cs",
+      "sha256": "0776cd7ffede60e6b76c9a7c1302efae17e954c8d478721de27212f09c9903bf"
+    },
+    {
+      "upstream": "YSMViewer.Browser/Rendering/ThreeJs/ThreeJsSpecJsonContext.cs",
+      "local": "ysm-engine/ThreeJsSpecJsonContext.cs",
+      "sha256": "a9b7ab1d9edf7c7c2d16859bfe8d72e3398538aafafc637ceea747448882908d"
+    }
+  ]
+}

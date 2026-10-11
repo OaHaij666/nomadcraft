@@ -1,6 +1,5 @@
 import { $t as t } from "@/lang/i18n";
 import { useAppStateStore } from "@/stores/useAppStateStore";
-import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import type { LoginUserInfo } from "@/types/user";
 import InstallPage from "@/views/Install.vue";
 import LayoutContainer from "@/views/LayoutContainer.vue";
@@ -24,7 +23,6 @@ export interface RouterMetaInfo {
         to: RouteLocationNormalized,
         from: RouteLocationNormalized
       ) => string);
-  onlyDisplayEditMode?: boolean;
   customClass?: string[];
   condition?: () => boolean;
   breadcrumbs?: Array<{
@@ -61,6 +59,20 @@ export enum ROLE {
 
 const originRouterConfig: RouterConfig[] = [
   {
+    path: "/catalog",
+    name: t("TXT_CODE_CATALOG_CENTER"),
+    component: LayoutContainer,
+    meta: { permission: ROLE.USER, mainMenu: true },
+    children: [
+      {
+        path: "/catalog/detail",
+        name: t("TXT_CODE_CATALOG_INSTANCE_DETAIL"),
+        component: LayoutContainer,
+        meta: { permission: ROLE.USER, mainMenu: false }
+      }
+    ]
+  },
+  {
     path: "/install",
     name: t("TXT_CODE_82d650be"),
     component: InstallPage,
@@ -70,25 +82,6 @@ const originRouterConfig: RouterConfig[] = [
     }
   },
   {
-    path: "/quickstart",
-    name: t("TXT_CODE_2799a1dd"),
-    component: LayoutContainer,
-    meta: {
-      permission: ROLE.ADMIN,
-      mainMenu: false
-    },
-    children: [
-      {
-        path: "/quickstart/minecraft",
-        name: t("TXT_CODE_88249aee"),
-        component: LayoutContainer,
-        meta: {
-          permission: ROLE.ADMIN
-        }
-      }
-    ]
-  },
-  {
     path: "/",
     name: "",
     component: LayoutContainer,
@@ -96,10 +89,10 @@ const originRouterConfig: RouterConfig[] = [
       mainMenu: true,
       redirect: (user) => {
         if (user?.permission === ROLE.ADMIN) {
-          return "/instances";
+          return "/catalog";
         }
         if (user?.permission && user.permission >= ROLE.USER) {
-          return "/customer";
+          return "/catalog";
         }
         return "/login";
       },
@@ -108,7 +101,7 @@ const originRouterConfig: RouterConfig[] = [
   },
   {
     path: "/instances",
-    name: t("TXT_CODE_e21473bc"),
+    name: t("TXT_CODE_CATALOG_EXISTING_RUNTIMES"),
     component: LayoutContainer,
     meta: {
       mainMenu: true,
@@ -170,23 +163,10 @@ const originRouterConfig: RouterConfig[] = [
     ]
   },
   {
-    path: "/market",
-    name: t("TXT_CODE_27594db8"),
+    path: "/worlds/new",
+    name: t("TXT_CODE_CATALOG_NEW_RUNTIME"),
     component: LayoutContainer,
-    meta: {
-      mainMenu: true,
-      permission: ROLE.ADMIN
-    },
-    children: [
-      {
-        path: "editor",
-        name: t("TXT_CODE_54275b9c"),
-        component: LayoutContainer,
-        meta: {
-          permission: ROLE.ADMIN
-        }
-      }
-    ]
+    meta: { mainMenu: false, permission: ROLE.ADMIN }
   },
   {
     path: "/overview",
@@ -218,7 +198,7 @@ const originRouterConfig: RouterConfig[] = [
   },
   {
     path: "/node",
-    name: t("TXT_CODE_e076d90b"),
+    name: t("TXT_CODE_WORLD_HOSTS"),
     component: LayoutContainer,
     meta: {
       permission: ROLE.ADMIN,
@@ -259,6 +239,18 @@ const originRouterConfig: RouterConfig[] = [
   },
 
   {
+    path: "/compute",
+    name: t("TXT_CODE_COMPUTE_TITLE"),
+    component: LayoutContainer,
+    meta: {permission: ROLE.USER, mainMenu: true}
+  },
+  {
+    path: "/preferences",
+    name: t("TXT_CODE_HOSTING_PREF_PERSONAL"),
+    component: LayoutContainer,
+    meta: {permission: ROLE.USER, mainMenu: true}
+  },
+  {
     path: "/settings",
     name: t("TXT_CODE_b5c7b82d"),
     component: LayoutContainer,
@@ -288,12 +280,12 @@ const originRouterConfig: RouterConfig[] = [
   },
   {
     path: "/customer",
-    name: t("TXT_CODE_ec299306"),
+    name: t("TXT_CODE_WORLD_LIST"),
     component: LayoutContainer,
     meta: {
       permission: ROLE.USER,
-      mainMenu: true,
-      onlyDisplayEditMode: true
+      mainMenu: false,
+      redirect: "/catalog"
     }
   },
   {
@@ -302,18 +294,6 @@ const originRouterConfig: RouterConfig[] = [
     component: LoginPage,
     meta: {
       permission: ROLE.GUEST,
-      onlyDisplayEditMode: true,
-      customClass: ["nav-button-warning"]
-    }
-  },
-  {
-    path: "/_open_page",
-    name: t("TXT_CODE_2cf59872"),
-    component: LayoutContainer,
-    meta: {
-      permission: ROLE.ADMIN, // open page without permission
-      mainMenu: true,
-      onlyDisplayEditMode: true,
       customClass: ["nav-button-warning"]
     }
   },
@@ -355,7 +335,6 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const { state, updateUserInfo, isAdmin } = useAppStateStore();
-  const { containerState } = useLayoutContainerStore();
 
   const userPermission = state.userInfo?.permission ?? 0;
   const toPagePermission = Number(to.meta.permission ?? 0);
@@ -372,6 +351,10 @@ router.beforeEach(async (to, from, next) => {
     toPagePermission
   );
 
+  if (state.isInstall && toRoutePath === "/install") {
+    return next(state.userInfo?.token ? "/catalog" : "/login");
+  }
+
   if (!state.isInstall && toRoutePath !== "/install") {
     return next("/install");
   }
@@ -387,7 +370,7 @@ router.beforeEach(async (to, from, next) => {
   if (toRoutePath === "/sso/callback") {
     try {
       await updateUserInfo();
-      return next(isAdmin.value ? "/" : "/customer");
+      return next("/catalog");
     } catch {
       return next("/login");
     }
@@ -395,10 +378,9 @@ router.beforeEach(async (to, from, next) => {
 
   if (toRoutePath === "/login" && state.userInfo?.token) {
     if (isAdmin.value) {
-      if (containerState.isDesignMode) return next();
-      else return next("/");
+      return next("/");
     }
-    return next("/customer");
+    return next("/catalog");
   }
 
   if (

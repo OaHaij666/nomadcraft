@@ -143,27 +143,13 @@ onMounted(async () => {
     <CardPanel class="login-panel">
       <template #body>
         <div v-show="loginStep === 0" class="login-panel-body">
-          <!-- The wordmark is the page's only loud element; everything else
-               around it stays quiet. -->
+          <!-- The wordmark. The login screen does one job: get you in. -->
           <div class="nc-wordmark">
             <span class="nc-wordmark-name">NomadCraft</span>
             <span class="nc-wordmark-rule" aria-hidden="true"></span>
             <span class="nc-wordmark-tag">{{
               props.card?.title ? props.card?.title : t("TXT_CODE_3ba5ad")
             }}</span>
-          </div>
-          <!-- Two worlds, drawn only with type and a hairline: one awake on
-               someone's machine, one asleep. This is the daily question, so it
-               is what the first screen shows. -->
-          <div class="nc-worldmarks" aria-hidden="true">
-            <div class="world live">
-              <span class="name"><span class="dot"></span>星河镇</span>
-              <span class="meta">在 alex 的电脑上</span>
-            </div>
-            <div class="world asleep">
-              <span class="name"><span class="dot"></span>老存档</span>
-              <span class="meta">休眠中</span>
-            </div>
           </div>
           <a-typography-paragraph class="mb-20">
             {{ t("TXT_CODE_5b60ad00") }}
@@ -369,56 +355,6 @@ onMounted(async () => {
   font-family: var(--nc-font-mono);
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--nc-mist);
-}
-
-// The two worlds are the memorable element: a live one carries an aurora mark,
-// an asleep one is only an outline.
-.nc-worldmarks {
-  display: flex;
-  gap: 18px;
-  margin-bottom: 28px;
-}
-
-.nc-worldmarks .world {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: var(--nc-radius);
-  border: var(--nc-hairline);
-  background: rgba(18, 19, 28, 0.35);
-}
-
-.nc-worldmarks .world.live {
-  border-color: var(--nc-aurora-dim);
-}
-
-.nc-worldmarks .world .name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--nc-parchment);
-}
-
-.nc-worldmarks .world .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--nc-haze);
-  flex-shrink: 0;
-}
-
-.nc-worldmarks .world.live .dot {
-  background: var(--nc-aurora);
-}
-
-.nc-worldmarks .world .meta {
-  font-family: var(--nc-font-mono);
-  font-size: 11px;
   color: var(--nc-mist);
 }
 

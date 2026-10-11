@@ -1,3 +1,5 @@
+import type {HostingWillingness} from "../../../shared/nomad-hosting-preference";
+
 export interface UserInstance {
   instanceUuid: string;
   daemonId: string;
@@ -22,6 +24,7 @@ export interface BaseUserInfo {
   registerTime: string;
   instances: UserInstance[];
   permission: number;
+  hostingWillingness?: HostingWillingness;
   apiKey: string;
   isInit: boolean;
   secret: string;

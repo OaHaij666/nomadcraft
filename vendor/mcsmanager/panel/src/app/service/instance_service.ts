@@ -140,6 +140,7 @@ export async function getInstancesByUuid(
     registerTime: user.registerTime,
     instances: resInstances,
     permission: user.permission,
+    hostingWillingness: user.hostingWillingness,
     apiKey: user.apiKey ? "__MCSM_SECRET_DATA__" : "",
     isInit: user.isInit,
     open2FA: user.open2FA,

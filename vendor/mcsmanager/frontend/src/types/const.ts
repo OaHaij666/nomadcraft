@@ -1,7 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { TYPE_UNIVERSAL } from "@/hooks/useInstance";
 import { t } from "@/lang/i18n";
-import type { QuickStartPackages } from ".";
 
 export enum AppTheme {
   AUTO = 0,
@@ -212,23 +211,4 @@ export const defaultInstanceInfo: IGlobalInstanceConfig = {
     openFrpTunnelId: "",
     openFrpToken: ""
   }
-};
-
-export const defaultQuickStartPackages: QuickStartPackages = {
-  language: "",
-  description: "",
-  title: "",
-  category: "",
-  runtime: "",
-  size: "",
-  hardware: "",
-  remark: "",
-  targetLink: "",
-  author: "",
-  setupInfo: defaultInstanceInfo,
-  gameType: "",
-  image: "",
-  platform: "",
-  tags: [],
-  isSummary: false
 };

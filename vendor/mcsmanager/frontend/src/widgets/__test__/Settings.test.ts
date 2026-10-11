@@ -15,8 +15,6 @@ const mocks = vi.hoisted(() => ({
   submitExecute: vi.fn(),
   upgradeInfoExecute: vi.fn(),
   upgradePanelExecute: vi.fn(),
-  getSettingsConfig: vi.fn(async () => ({ theme: {} })),
-  setSettingsConfig: vi.fn(),
   reportErrorMsg: vi.fn(),
   useUploadFileDialog: vi.fn(async () => undefined)
 }));
@@ -26,27 +24,6 @@ vi.mock("@/services/apis", () => ({
   setSettingInfo: () => ({ execute: mocks.submitExecute, isLoading: false }),
   getPanelUpgradeInfo: () => ({ execute: mocks.upgradeInfoExecute }),
   upgradePanel: () => ({ execute: mocks.upgradePanelExecute })
-}));
-
-vi.mock("@/stores/useLayoutConfig", () => ({
-  useLayoutConfigStore: () => ({
-    getSettingsConfig: mocks.getSettingsConfig,
-    setSettingsConfig: mocks.setSettingsConfig
-  })
-}));
-
-vi.mock("@/stores/useAppConfigStore", () => ({
-  useAppConfigStore: () => ({
-    setLogoImage: vi.fn(),
-    setBackgroundImage: vi.fn()
-  })
-}));
-
-vi.mock("@/stores/useLayoutContainerStore", () => ({
-  useLayoutContainerStore: () => ({
-    changeDesignMode: vi.fn(),
-    containerState: { isDesignMode: false, showNewCardDialog: false, showPhoneMenu: false }
-  })
 }));
 
 vi.mock("@/config/router", () => ({
@@ -191,7 +168,9 @@ describe("Settings.vue auto update tab", () => {
 
     const sourceInput = wrapper.find('input[placeholder="TXT_CODE_AUTOUPDATE_WEB_SOURCE_PH"]');
     expect(sourceInput.exists()).toBe(true);
-    expect((sourceInput.element as HTMLInputElement).value).toBe("https://example.com/manifest.json");
+    expect((sourceInput.element as HTMLInputElement).value).toBe(
+      "https://example.com/manifest.json"
+    );
 
     expect(wrapper.text()).toContain("TXT_CODE_AUTOUPDATE_WEB_SOURCE_DESC");
     expect(wrapper.text()).toContain("TXT_CODE_AUTOUPDATE_WEB_ACTION_DESC");
@@ -312,12 +291,10 @@ describe("Settings.vue auto update tab", () => {
     await openAutoUpdateTab();
 
     let confirmOptions: any = null;
-    const confirmSpy = vi
-      .spyOn(Modal, "confirm")
-      .mockImplementation(((opts: any) => {
-        confirmOptions = opts;
-        return {} as any;
-      }) as any);
+    const confirmSpy = vi.spyOn(Modal, "confirm").mockImplementation(((opts: any) => {
+      confirmOptions = opts;
+      return {} as any;
+    }) as any);
     const successSpy = vi.spyOn(Modal, "success").mockImplementation((() => ({})) as any);
 
     await findButton("TXT_CODE_AUTOUPDATE_WEB_BTN")!.trigger("click");

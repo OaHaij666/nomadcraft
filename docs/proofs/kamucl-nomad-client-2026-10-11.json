@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-11",
+  "client": "KAMUCL NC 0.1.0",
+  "base": "kamubaba-i/KAMUCL main",
+  "checks": {
+    "typescript": "passed",
+    "build": "passed",
+    "licenseCheck": "passed",
+    "tests": {
+      "passed": 1588,
+      "failed": 0,
+      "skipped": 1
+    },
+    "windowsPortableStart": "passed",
+    "portableExe": "not generated after version reset",
+    "compactZip": "not generated after version reset",
+    "unpackedZip": "not generated after version reset",
+    "portableSHA256": "",
+    "multiplayerEntry": "passed",
+    "nomadSessionCookie": "implemented",
+    "isolatedTestControlPlane": {
+      "base": "http://127.0.0.1:23334",
+      "account": "compute_review",
+      "catalogRead": "verified"
+    },
+    "updateChannel": "disabled until NomadCraft release repository is configured"
+  },
+  "scope": "The existing multiplayer section now offers two top-level choices: KAMUCL local hosting tools, or NomadCraft cloud control. The cloud card opens the bundled Nomad view; local FRP, VoxLink and Terracotta pages remain available.",
+  "limitations": [
+    "real Microsoft login not tested",
+    "room actions and node-agent supervision are not yet wired",
+    "backend remains the existing local Nomad panel"
+  ]
+}

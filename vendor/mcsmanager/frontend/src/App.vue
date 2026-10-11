@@ -14,12 +14,10 @@ import Breadcrumbs from "./components/Breadcrumbs.vue";
 import InputDialogProvider from "./components/InputDialogProvider.vue";
 import MyselfInfoDialog from "./components/MyselfInfoDialog.vue";
 import { useAppStateStore } from "./stores/useAppStateStore";
-import { useLayoutContainerStore } from "./stores/useLayoutContainerStore";
 import { closeAppLoading, setLoadingTitle } from "./tools/dom";
 
 const { hasBgImage, initAppTheme, useSidebarLayout } = useAppConfigStore();
-const { containerState } = useLayoutContainerStore();
-const { state: appState } = useAppStateStore();
+const { isLogged } = useAppStateStore();
 const { isPhone } = useScreen();
 
 const GLOBAL_COMPONENTS = [InputDialogProvider, MyselfInfoDialog, UploadBubble];
@@ -28,12 +26,7 @@ const GLOBAL_COMPONENTS = [InputDialogProvider, MyselfInfoDialog, UploadBubble];
   element.props.size.default = "large";
 });
 
-const designModeNavStyle = computed(() => {
-  if (!appState.userInfo) return {};
-  return {
-    zIndex: containerState.isDesignMode ? 997 : 1
-  };
-});
+const showNavigation = computed(() => isLogged.value);
 
 onMounted(async () => {
   setLoadingTitle("Loading application settings...");
@@ -46,16 +39,19 @@ onMounted(async () => {
   <AppConfigProvider :has-bg-image="hasBgImage">
     <!-- App Container -->
     <div class="global-app-container">
-      <AppSidebarMenu v-if="useSidebarLayout" :style="designModeNavStyle" />
-      <main class="main-content" :class="{ 'app-layout-sidebar-only': useSidebarLayout }">
-        <AppHeader v-if="!useSidebarLayout" :style="designModeNavStyle" />
-        <Breadcrumbs />
+      <AppSidebarMenu v-if="showNavigation && useSidebarLayout" />
+      <main
+        class="main-content"
+        :class="{ 'app-layout-sidebar-only': showNavigation && useSidebarLayout }"
+      >
+        <AppHeader v-if="showNavigation && !useSidebarLayout" />
+        <Breadcrumbs v-if="showNavigation" />
         <RouterView :key="$route.fullPath" />
       </main>
     </div>
 
     <!-- Mobile Bottom Navigation -->
-    <AppBottomNav v-if="isPhone && !useSidebarLayout" />
+    <AppBottomNav v-if="showNavigation && isPhone && !useSidebarLayout" />
 
     <!-- Global Components -->
     <component :is="component" v-for="(component, index) in GLOBAL_COMPONENTS" :key="index" />

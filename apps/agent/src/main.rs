@@ -20,6 +20,22 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Host an authorized cloud save using the panel ticket issued by PCL.
+    PanelHost {
+        #[arg(long)] ticket_file: PathBuf,
+        #[arg(long, default_value = ".nomad/agent")] data_dir: PathBuf,
+        #[arg(long, default_value = "java")] java: PathBuf,
+        #[arg(long, default_value_t = 120)] checkpoint_seconds: u64,
+        #[arg(long)] stop_file: Option<PathBuf>,
+    },
+    /// Run a paired persistent compute node against the authenticated panel.
+    PanelNode {
+        #[arg(long)] credential_file: PathBuf,
+        #[arg(long, default_value=".nomad/node")] data_dir: PathBuf,
+        #[arg(long, default_value="java")] java: PathBuf,
+        #[arg(long, default_value_t=120)] checkpoint_seconds:u64,
+        #[arg(long)] stop_file:Option<PathBuf>,
+    },
     /// Print build information, then exit.
     Info,
     /// Register this machine with a control plane and print the assigned id.
@@ -91,6 +107,12 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
+        Command::PanelHost {ticket_file,data_dir,java,checkpoint_seconds,stop_file} => {
+            nomad_agent::hosting::run_host(nomad_agent::hosting::HostingOptions {ticket_file,data_dir,java,checkpoint_seconds,stop_file}).await?;
+        }
+        Command::PanelNode {credential_file,data_dir,java,checkpoint_seconds,stop_file} => {
+            nomad_agent::worker::run_worker(nomad_agent::worker::WorkerOptions {credential_file,data_dir,java,checkpoint_seconds,stop_file}).await?;
+        }
         Command::Info => {
             println!("nomad-agent {}", env!("CARGO_PKG_VERSION"));
             println!("protocol version: {}", nomad_proto::PROTOCOL_VERSION);

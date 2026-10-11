@@ -16,9 +16,12 @@
 //! testable: [`supervisor`] knows nothing about HTTP or sockets.
 
 pub mod config;
+pub mod hosting;
 pub mod control;
 pub mod supervisor;
 
 pub use config::AgentConfig;
 pub use control::{ControlClient, ControlError};
 pub use supervisor::{ServerSpec, ServerState, StopAction, StopPolicy, Supervisor};
+
+pub mod worker;

@@ -7,6 +7,16 @@ server, nobody port-forwards, nobody keeps their PC awake so others can play.
 
 > 一个"跑在朋友之间"的 Minecraft 世界：地址不变、存档不断、机器轮着用、没人时自己睡觉。
 
+## Friends-first product scope
+
+NomadCraft is for a trusted group of friends. It does not attempt anti-cheat or adversarial verification of the computer running Minecraft. The center manages access, placement and committed room state; the selected node runs the actual game server. Normal handover saves and stops the old server, commits its complete persistent state, then restores it on the next node. Session-preserving migration is a later enhancement.
+
+Package checks protect download integrity and repair missing/corrupt components; local resources and normal configuration/runtime changes are not cheating. Management authentication and single-writer leases remain necessary for ordinary administration and preventing conflicting saves. See [current product scope](docs/产品愿景.md) and [local data design](docs/本地扩展与运行数据-同步设计.md). This scope is confirmed; relaxed launcher checks and full mod-data migration are still pending implementation.
+
+## KAMUCL NomadCraft desktop client
+
+KAMUCL NC is now the official desktop client for NomadCraft. Its Electron/Vue/TypeScript renderer is the user-facing client; its main process keeps Microsoft accounts, Java, Minecraft files, local networking tools and the local agent on the player machine. NomadCraft servers provide the authenticated control plane, catalog, permissions, compute scheduling, ingress and committed room state. The first Nomad view already connects to a configured backend, logs in with an in-memory session and reads authorized instances.
+
 ## The idea
 
 Normally a Minecraft server is tied to one machine: either someone rents a box and
@@ -16,9 +26,9 @@ moment they close their laptop.
 NomadCraft inverts that. The world belongs to the group, not to whichever PC
 happens to be running it:
 
-- **The public node never runs the game.** It is a doorbell and a switchboard: it
-  knows who is hosting, hands out short-lived leases, and forwards bytes. It plays
-  no Minecraft and needs no game version, so a 1 vCPU / 512 MB box is plenty.
+- **The public node can coordinate without running the game.** It knows who is
+  hosting, hands out short-lived leases, and forwards bytes. A capable server can
+  also run Minecraft as a fixed, scheduled or fallback compute node.
 - **The world runs on a player's machine.** Whichever friend is online and best
   suited runs the real server, so big modpacks use the players' hardware.
 - **Leaving hands over, it does not end.** When the host quits, the control plane
@@ -27,7 +37,11 @@ happens to be running it:
 - **Nobody playing means nothing running.** The world sleeps until the next player
   wakes it.
 
-## Status: MVP is end-to-end
+## Status: original Rust MVP is end-to-end
+
+The section below describes the original Rust prototype. The panel-backed agent
+now also launches real vanilla Minecraft and supports persistent compute nodes;
+see [current implementation](docs/计算节点与网络自检-实现.md).
 
 All three components exist and are wired together. The full path works today:
 register a machine, elect a host, upload a world as a checkpoint, and let another

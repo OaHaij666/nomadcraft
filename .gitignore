@@ -20,3 +20,9 @@ vendor/**/production/
 vendor/**/dist/
 vendor/**/data/
 vendor/**/lib/*.exe
+
+
+# Generated local YSMViewer parser runtime
+vendor/kamucl/ysm-engine/**/bin/
+vendor/kamucl/ysm-engine/**/obj/
+vendor/kamucl/ysm-runtime/viewer/

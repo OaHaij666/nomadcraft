@@ -5,11 +5,44 @@ import axios from "axios";
 import EventEmitter from "eventemitter3";
 import _ from "lodash";
 
+
+function embeddedPanelQuery(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const hash = window.location.hash;
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  return new URLSearchParams(hashQuery || window.location.search.slice(1));
+}
+
+export function embeddedPanelAddress(): string {
+  const raw = embeddedPanelQuery().get("nomadAddress") || "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function resolveApiUrl(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const base = embeddedPanelAddress();
+  if (!base || /^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+  try {
+    return new URL(value, base + "/").toString();
+  } catch {
+    return value;
+  }
+}
+
 axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 axios.interceptors.request.use(async (config) => {
   const { state } = useAppStateStore();
+  config.url = resolveApiUrl(config.url) as string;
   if (!config.params) config.params = {};
-  config.params.token = state.userInfo?.token;
+  const query = embeddedPanelQuery();
+  config.params.token = state.userInfo?.token || query.get("nomadToken") || undefined;
   return config;
 });
 

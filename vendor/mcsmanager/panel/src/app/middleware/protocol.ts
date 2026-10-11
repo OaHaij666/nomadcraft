@@ -48,6 +48,9 @@ export async function middleware(
     return;
   }
 
+  // Explicit no-content responses (e.g. a new world with no restore snapshot) stay empty.
+  if (ctx.status === 204) return;
+
   // release all data streams
   if (ctx.body instanceof Stream) {
     return;

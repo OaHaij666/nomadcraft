@@ -45,7 +45,7 @@ export const useAppStateStore = createGlobalState(() => {
       if (userInfo) {
         state.userInfo = userInfo;
       } else {
-        const info = await reqUserInfo();
+        const info = await reqUserInfo({ forceRequest: true });
         if (info.value) {
           state.userInfo = info.value;
         } else {
@@ -68,7 +68,7 @@ export const useAppStateStore = createGlobalState(() => {
 
   const updatePanelStatus = async () => {
     const { state } = useAppStateStore();
-    const panelStatusRes = await panelStatus().execute();
+    const panelStatusRes = await panelStatus().execute({ forceRequest: true });
     state.isInstall = panelStatusRes.value?.isInstall ?? true;
     if (panelStatusRes.value?.settings) {
       state.settings = { ...state.settings, ...panelStatusRes.value.settings };

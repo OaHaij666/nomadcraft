@@ -7,19 +7,6 @@ export type MapData<T> = IMapData<T>;
 export type LayoutCardParams = ILayoutCardParams;
 export type LayoutCard = ILayoutCard;
 
-export interface LayoutWithRouter {
-  page: string;
-  items: LayoutCard[];
-}
-
-export enum NEW_CARD_TYPE {
-  COMMON = "COMMON",
-  INSTANCE = "INSTANCE",
-  DATA = "DATA",
-  USER = "USER",
-  OTHER = "OTHER"
-}
-
 export interface InstanceRuntimeInfo {
   mcPingOnline: boolean;
   currentPlayers: number;
@@ -69,6 +56,9 @@ export interface NodeStatus {
 }
 
 export interface Settings {
+  nomadPackageUploadGiB: number;
+  nomadRelayPublicHost: string;
+  nomadRelayBindIp: string;
   httpPort: number;
   httpIp: any;
   reverseProxyMode: boolean;
@@ -222,7 +212,6 @@ export interface ContainerInfo {
 }
 
 export type QuickStartTemplate = IQuickStartTemplate;
-export type QuickStartPackages = IQuickStartPackages;
 
 export interface LabelValueOption {
   label: string;

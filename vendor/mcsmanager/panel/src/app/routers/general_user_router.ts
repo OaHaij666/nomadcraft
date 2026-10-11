@@ -1,3 +1,7 @@
+import {
+  DEFAULT_HOSTING_WILLINGNESS,
+  isHostingWillingness
+} from "../../../../shared/nomad-hosting-preference";
 import Router from "@koa/router";
 import Koa from "koa";
 import { toBoolean } from "mcsmanager-common";
@@ -55,6 +59,48 @@ router.get("/", permission({ level: ROLE.USER, token: false, speedLimit: false }
     res.token = getToken(ctx);
     ctx.body = res;
   }
+});
+
+// Hosting preference is always scoped to the authenticated account.
+router.get(
+  "/hosting-preference",
+  permission({ level: ROLE.USER, speedLimit: false }),
+  async (ctx) => {
+    const user = getUserFromCtx(ctx);
+    if (!user) {
+      ctx.status = 403;
+      ctx.body = "authentication_required";
+      return;
+    }
+    ctx.body = { hostingWillingness: user.hostingWillingness ?? DEFAULT_HOSTING_WILLINGNESS };
+  }
+);
+router.put("/hosting-preference", permission({ level: ROLE.USER }), async (ctx) => {
+  const user = getUserFromCtx(ctx),
+    body = ctx.request.body;
+  if (!user) {
+    ctx.status = 403;
+    ctx.body = "authentication_required";
+    return;
+  }
+  if (
+    Object.keys(ctx.query).some((key) => key !== "token" && key !== "_force") ||
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    !isHostingWillingness(body.hostingWillingness)
+  ) {
+    ctx.status = 400;
+    ctx.body = "invalid_hosting_preference";
+    return;
+  }
+  await userSystem.setHostingWillingness(user.uuid, body.hostingWillingness);
+  operationLogger.log("user_config_change", {
+    ...getOperationLoggerOperator(ctx),
+    target_user_name: user.userName
+  });
+  ctx.body = { hostingWillingness: user.hostingWillingness };
 });
 
 // [Low-level Permission]

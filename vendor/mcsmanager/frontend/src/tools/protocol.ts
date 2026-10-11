@@ -34,10 +34,25 @@ export function mapDaemonAddress(remoteMappings: RemoteMappingEntry[]) {
   return match.to;
 }
 
+function embeddedPanelOrigin(): string {
+  if (typeof window === "undefined") return "";
+  const hash = window.location.hash;
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  const raw = new URLSearchParams(hashQuery || window.location.search.slice(1)).get("nomadAddress") || "";
+  try {
+    const url = new URL(raw);
+    return ["http:", "https:"].includes(url.protocol) ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
 export function parseForwardAddress(addr: string, require: "http" | "ws") {
   // save its protocol header
   //ws://127.0.0.1:25565
-  let protocol = `${window.location.protocol}//`;
+  const panelOrigin = embeddedPanelOrigin();
+  const locationOrigin = panelOrigin || `${window.location.protocol}//${window.location.host}`;
+  let protocol = `${locationOrigin.split(":")[0]}://`;
   const addrProtocolString = addr.toLocaleLowerCase();
   if (require === "http") {
     if (addrProtocolString.indexOf("ws://") === 0) protocol = "http://";

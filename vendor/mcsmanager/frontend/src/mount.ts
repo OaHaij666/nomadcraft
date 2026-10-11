@@ -29,7 +29,10 @@ export async function mountApp() {
   try {
     const { execute: reqUserInfo } = userInfoApi();
     const info = await reqUserInfo();
-    updateUserInfo(info.value);
+    if (!info.value?.token || Number(info.value.permission) <= 0) {
+      throw new Error("控制面会话无效，请回到多人游戏重新登录");
+    }
+    await updateUserInfo(info.value);
   } catch (err) {
     console.error("Init user info Error:", err);
   } finally {

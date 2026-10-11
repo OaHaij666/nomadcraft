@@ -1,16 +1,13 @@
 /* eslint-disable no-unused-vars */
-import logo from "@/assets/logo.png";
 import { getCurrentLang, setLanguage } from "@/lang/i18n";
 import { AppTheme, THEME_KEY } from "@/types/const";
 import { createGlobalState, useBreakpoints, useLocalStorage, usePreferredDark } from "@vueuse/core";
 import { theme as antTheme } from "ant-design-vue";
 import type { ThemeConfig } from "ant-design-vue/es/config-provider/context";
-import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useLayoutConfigStore } from "./useLayoutConfig";
+import { computed, reactive, ref, watch } from "vue";
 
 export const useAppConfigStore = createGlobalState(() => {
   const isPreferredDark = usePreferredDark();
-  const { getSettingsConfig } = useLayoutConfigStore();
 
   // Shared tokens for both themes. The palette lives in assets/nomad-theme.scss;
   // these values mirror it so Ant's components agree with our own CSS instead of
@@ -39,11 +36,6 @@ export const useAppConfigStore = createGlobalState(() => {
       colorWarning: "#b06a3d"
     }
   });
-  const appConfig = reactive({
-    logoImage: logo as string
-  });
-
-  const logoImage = computed(() => appConfig.logoImage);
 
   // The product's signature look is the night sky, so dark is the default.
   const currentTheme = useLocalStorage<AppTheme>(THEME_KEY, AppTheme.DARK);
@@ -56,35 +48,10 @@ export const useAppConfigStore = createGlobalState(() => {
 
   const hasBgImage = ref(false);
 
-  /** Main app nav layout: "left" = sidebar, "right" = top header only. Filled by initAppTheme(). */
-  const sidebarPosition = ref<"left" | "right">("left");
-
-  /** Whether to show the left sidebar; when false, only top header (AppHeader) is used. */
+  // Desktop uses a fixed sidebar; narrower screens use the header.
   const breakpoints = useBreakpoints({ sidebar: 1400 });
   const isWideEnoughForSidebar = breakpoints.greaterOrEqual("sidebar");
-  const useSidebarLayout = computed(
-    () => sidebarPosition.value === "left" && isWideEnoughForSidebar.value
-  );
-
-  const setBackgroundImage = (url: string) => {
-    const body = document.querySelector("body");
-    if (body) {
-      body.style.backgroundSize = "cover";
-      body.style.backgroundPosition = "center";
-      body.style.backgroundRepeat = "no-repeat";
-      if (isDarkTheme.value) {
-        body.style.backgroundImage = `linear-gradient(135deg, rgba(0,0,0,0.65), rgba(0,0,0,0.65) 100%), url(${url})`;
-        body.classList.remove("app-light-extend-theme");
-        body.classList.add("app-dark-extend-theme");
-      } else {
-        body.style.backgroundImage = `linear-gradient(135deg, rgba(220,220,220,0.3), rgba(53,53,53,0.3) 100%), url(${url})`;
-        body.classList.remove("app-dark-extend-theme");
-        body.classList.add("app-light-extend-theme");
-      }
-
-      hasBgImage.value = true;
-    }
-  };
+  const useSidebarLayout = isWideEnoughForSidebar;
 
   const setLight = () => {
     theme.algorithm = antTheme.defaultAlgorithm;
@@ -130,12 +97,6 @@ export const useAppConfigStore = createGlobalState(() => {
       [AppTheme.DARK]: () => setDark()
     };
     fn[currentTheme.value]?.();
-
-    const frontendSettings = await getSettingsConfig();
-    if (frontendSettings?.theme?.backgroundImage)
-      setBackgroundImage(frontendSettings.theme.backgroundImage);
-    const pos = frontendSettings?.theme?.sidebarPosition;
-    sidebarPosition.value = pos === "left" || pos === "right" ? pos : "right";
   };
 
   const setTheme = (t: AppTheme) => {
@@ -151,46 +112,21 @@ export const useAppConfigStore = createGlobalState(() => {
     return getCurrentLang() ?? "en_us";
   };
 
-  const setLogoImage = (url: string) => {
-    if (url) {
-      appConfig.logoImage = url;
-    }
-  };
-
   watch(isPreferredDark, () => {
     if (currentTheme.value === AppTheme.AUTO) {
       initAppTheme();
     }
   });
 
-  onMounted(async () => {
-    try {
-      const settingsConfig = await getSettingsConfig();
-      if (settingsConfig?.theme?.logoImage) {
-        setLogoImage(settingsConfig.theme.logoImage);
-      }
-    } catch (error) {
-      console.error("Failed to load settings config:", error);
-    }
-  });
-
   return {
-    appConfig,
-    logoImage,
     hasBgImage,
-    sidebarPosition,
     useSidebarLayout,
-    setLogoImage,
     changeLanguage,
     getCurrentLanguage,
     isDarkTheme,
     initAppTheme,
     setTheme,
-    setBackgroundImage,
     currentTheme,
     themeConfig: theme
   };
 });
-
-
-

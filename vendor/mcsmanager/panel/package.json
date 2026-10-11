@@ -48,7 +48,10 @@
     "redis": "^4.5.1",
     "socket.io": "^4.5.3",
     "socket.io-client": "^4.7.2",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "ws": "^8.18.3",
+    "yauzl": "^3.2.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
@@ -65,6 +68,9 @@
     "@types/os-utils": "0.0.1",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^8.3.0",
+    "@types/ws": "^8.18.1",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "eslint": "^9.39.1",
     "nodemon": "^3.1.10",
     "supertest": "^7.0.0",

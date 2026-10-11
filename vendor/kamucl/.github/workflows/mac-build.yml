@@ -1,0 +1,440 @@
+name: macOS packages
+on:
+  workflow_dispatch:
+    inputs:
+      resume_mac_arm64:
+        description: 'Only enable after Mac ARM64 production is explicitly resumed'
+        type: boolean
+        default: false
+      resource_comparison:
+        description: 'Run the separately authorized native resource comparison'
+        type: boolean
+        default: false
+      verification_groups:
+        description: 'All acceptance groups, or only the changed parity QA (not a full qualification)'
+        type: choice
+        options: [all, parity]
+        default: all
+  push:
+    branches: [master]
+    paths: ['.github/workflows/mac-build.yml', 'src/**', 'tests/**', 'scripts/**', 'native/**', 'bridge/**', 'build/**', 'package.json', 'package-lock.json', 'electron.vite.config.ts', 'tsconfig*.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'licenses/**', 'docs/CORRESPONDING_SOURCE.md']
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.event_name == 'workflow_dispatch' && inputs.resume_mac_arm64 == true
+    outputs:
+      version: ${{ steps.source-version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Expose the actual checked-out package version
+        id: source-version
+        run: node -e "require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'version='+require('./package.json').version+'\n')"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - name: Verify actual temporary-root aliases and legacy installation paths
+        run: node scripts/verify-legacy-filesystem120.cjs out/legacy-forge120-native-preflight.json
+      - name: Run complete tests and retain original output
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee out/mac120-npm-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-filesystem-tests-${{ matrix.arch }}
+          path: |
+            out/legacy-forge120-native-preflight.json
+            out/mac120-npm-test.log
+          if-no-files-found: error
+      - run: npx tsc --noEmit
+      - run: npm run license:check
+      - run: node scripts/build-bridge.cjs
+      - run: node scripts/verify-bridge-exit.cjs
+      - name: Package exact shared runtime, local signature, ZIP and DMG
+        run: node scripts/pack-mac.mjs ${{ matrix.arch }} --package-only
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-packages-${{ matrix.arch }}
+          path: |
+            release/*-mac-*.zip
+            release/*-mac-*.dmg
+            release/SHA256SUMS-mac-*.txt
+            release/mac-package-*.json
+          if-no-files-found: error
+  ui:
+    if: inputs.verification_groups != 'parity'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+            stage: app
+          - runner: macos-26
+            arch: arm64
+            stage: dmg
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-${{ matrix.arch }}
+          path: release
+      - name: Enable desktop material in disposable native session
+        run: defaults write com.apple.universalaccess reduceTransparency -bool false
+      - name: Validate exact APP or mounted DMG and current common feature evidence
+        run: node scripts/verify-mac-job.cjs ui ${{ matrix.arch }} ${{ matrix.stage }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-ui-${{ matrix.arch }}-${{ matrix.stage }}
+          path: |
+            release/mac-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+  parity:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-${{ matrix.arch }}
+          path: release
+      - name: Enable desktop material in disposable native session
+        run: defaults write com.apple.universalaccess reduceTransparency -bool false
+      - name: Reject invented display coverage or unsafe native mode preparation
+        run: node --test scripts/mac-native-display113-tests.cjs scripts/mac-parity-layout113-tests.cjs
+      - name: Full navigation coordinates, offline persistence, queue limit and real public MOD install
+        # A native display mode is observed and, only when safe, temporarily
+        # prepared by the owned job driver. Requested bounds alone never pass.
+        run: node scripts/verify-mac-job.cjs parity ${{ matrix.arch }} app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-parity-${{ matrix.arch }}-app
+          path: |
+            release/mac-parity-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+  game:
+    if: inputs.verification_groups != 'parity'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-${{ matrix.arch }}
+          path: release
+      - name: Actual native Minecraft installation, world, save, focus and Dock reopening
+        run: node scripts/verify-mac-job.cjs game ${{ matrix.arch }} app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-game-${{ matrix.arch }}
+          path: |
+            release/mac-game-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+  integration:
+    if: inputs.verification_groups != 'parity'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+            group: startup
+          - runner: macos-26
+            arch: arm64
+            group: tools
+          - runner: macos-26
+            arch: arm64
+            group: update
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-${{ matrix.arch }}
+          path: release
+      - name: Build local test coordinators from this exact source
+        run: |
+          node scripts/build-bridge.cjs
+          npm run build
+      - name: Independent native startup, network tools or transactional update
+        run: node scripts/verify-mac-job.cjs ${{ matrix.group }} ${{ matrix.arch }} app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-${{ matrix.group }}-${{ matrix.arch }}
+          path: |
+            release/mac-extra-*
+            release/mac-tools-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+
+  download-location:
+    if: inputs.verification_groups != 'parity'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [app, dmg]
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-arm64
+          path: release
+      - name: Native filename and default download location regression
+        run: node scripts/verify-mac-job.cjs download-location arm64 ${{ matrix.stage }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-download-location-arm64-${{ matrix.stage }}
+          path: |
+            release/download-location-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+
+  favorites:
+    if: inputs.verification_groups != 'parity'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [app, dmg]
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-arm64
+          path: release
+      - name: Enable original desktop material in this disposable native session
+        run: defaults write com.apple.universalaccess reduceTransparency -bool false
+      - name: Reject foreign or reused game PIDs and retain original diagnostic failures
+        run: node --test scripts/mac-owned-game-diagnostic113-tests.cjs
+      - name: Observe accelerated NSGL formats in this same native game session
+        # Diagnostic execution cannot skip or qualify the unchanged world test.
+        continue-on-error: true
+        run: node scripts/verify-mac-opengl120.cjs out/mac-opengl-capability120-${{ matrix.stage }}
+      - name: Real two-source favorites, version-install UI, SHA1 readback, game world and restart
+        run: node scripts/verify-mac-job.cjs favorites arm64 ${{ matrix.stage }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-favorites-arm64-${{ matrix.stage }}
+          path: |
+            release/favorites-proof-*
+            release/mac-job-*
+            out/mac-opengl-capability120-${{ matrix.stage }}/*.json
+            out/mac-opengl-capability120-${{ matrix.stage }}/*.log
+          if-no-files-found: error
+
+  batch120:
+    if: inputs.verification_groups != 'parity' && needs.package.outputs.version == '1.1.20'
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [app, dmg]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-arm64
+          path: release
+      - name: Enable actual desktop material in this disposable native session
+        run: defaults write com.apple.universalaccess reduceTransparency -bool false
+      - name: Current signed package download status and community selection with native foreground
+        run: node scripts/verify-mac-job.cjs batch120 arm64 ${{ matrix.stage }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-batch120-arm64-${{ matrix.stage }}
+          path: |
+            release/mac-batch120-proof-*
+            release/mac-job-*
+          if-no-files-found: error
+
+  batch121-fixture-ui:
+    if: inputs.verification_groups != 'parity' && needs.package.outputs.version == '1.1.21'
+    needs: package
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-arm64
+          path: release
+      - name: Validate strict version, provenance and native-runtime fixture QA contracts
+        run: node --test scripts/verify-mac-batch121-tests.cjs
+      - name: Fully build the production renderer from this exact checkout
+        run: |
+          node scripts/build-bridge.cjs
+          npm run build
+      - name: Native ARM64 Electron appearance and community fixture matrices
+        # This supplements the unchanged real APP/DMG/game/startup jobs.
+        # Any failing row makes the coordinator and this job fail; no acceptance is replaced.
+        run: node scripts/verify-mac-batch121.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-batch121-fixture-ui-arm64
+          path: |
+            out/mac-batch121-ui-*/receipt.json
+            out/mac-batch121-ui-*/*.log
+            out/appearance-121-ui-*/proof.json
+            out/appearance-121-ui-*/*.png
+            out/community-review-ui121-*/proof.json
+            out/community-review-ui121-*/*.png
+          if-no-files-found: error
+
+  resources:
+    if: github.event_name == 'workflow_dispatch' && inputs.resource_comparison == true
+    needs: package
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-packages-arm64
+          path: release
+      - name: Enable original desktop material and full motion in this disposable native session
+        run: node scripts/resource-mac113-conditions.cjs
+      - name: Qualify callback ownership, immutable baseline and original-sample analysis failure paths
+        run: node --test scripts/resource-callback113-tests.cjs scripts/resource-protocol113-tests.cjs scripts/resource-mac113-tests.cjs scripts/resource-mac113-parity-input-tests.cjs scripts/resource-mac113-gallery-tests.cjs scripts/resource-mac113-zombie-tests.cjs
+      - name: Qualify Swift task_info counters and exact owned PID creation identities
+        run: node scripts/resource-mac113-native.cjs
+      - name: Freeze ten public 1.1.12 groups, then measure ten alternating current candidate pairs
+        run: node scripts/resource-mac113.cjs --groups=10
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-resources-arm64
+          path: |
+            out/resource113/mac-native-conditions/**
+            out/resource113/mac-native-self-test/**
+            out/resource113/mac-paired-*/run.json
+            out/resource113/mac-paired-*/baseline-run-at-freeze.json
+            out/resource113/mac-paired-*/paired-run-at-compare.json
+            out/resource113/mac-paired-*/tool-sources-analysis/**
+            out/resource113/mac-paired-*/owner.json
+            out/resource113/mac-paired-*/baseline-download.json
+            out/resource113/mac-paired-*/frozen-baseline-noise.json
+            out/resource113/mac-paired-*/comparison.json
+            out/resource113/mac-paired-*/native/**
+            out/resource113/mac-paired-*/baseline-noise-*/cold/**
+            out/resource113/mac-paired-*/baseline-noise-*/warm/**
+            out/resource113/mac-paired-*/paired-*/cold/**
+            out/resource113/mac-paired-*/paired-*/warm/**
+            out/resource113/mac-paired-*/fixtures/synthetic-workloads/fixtures.json
+          if-no-files-found: error

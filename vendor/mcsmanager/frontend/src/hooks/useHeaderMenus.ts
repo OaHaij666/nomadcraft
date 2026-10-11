@@ -5,21 +5,10 @@ import { logoutUser } from "@/services/apis/index";
 import { useAppConfigStore } from "@/stores/useAppConfigStore";
 import { useAppStateStore } from "@/stores/useAppStateStore";
 import { useAppToolsStore } from "@/stores/useAppToolsStore";
-import { useLayoutConfigStore } from "@/stores/useLayoutConfig";
 import { useLayoutContainerStore } from "@/stores/useLayoutContainerStore";
 import { AppTheme } from "@/types/const";
-import {
-  AppstoreAddOutlined,
-  BgColorsOutlined,
-  BuildOutlined,
-  CloseCircleOutlined,
-  GithubFilled,
-  LogoutOutlined,
-  RedoOutlined,
-  SaveOutlined,
-  UserOutlined
-} from "@ant-design/icons-vue";
-import { message, Modal, notification } from "ant-design-vue";
+import { BgColorsOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons-vue";
+import { message, Modal } from "ant-design-vue";
 import type { Component } from "vue";
 import { computed } from "vue";
 
@@ -62,25 +51,16 @@ export type SidebarEntry =
   | SidebarAppDropdownEntry;
 
 export function useHeaderMenus() {
-  const { saveGlobalLayoutConfig, resetGlobalLayoutConfig } = useLayoutConfigStore();
-  const { containerState, changeDesignMode } = useLayoutContainerStore();
+  const { containerState } = useLayoutContainerStore();
   const { toPage } = useAppRouters();
   const { setTheme } = useAppConfigStore();
   const { state: appTools } = useAppToolsStore();
   const { isAdmin, state: appState, isLogged } = useAppStateStore();
   const { execute } = logoutUser();
 
-  const openNewCardDialog = (): void => {
-    containerState.showNewCardDialog = true;
-  };
-
   const handleToPage = (url: string) => {
     containerState.showPhoneMenu = false;
     toPage({ path: url });
-  };
-
-  const onClickIcon = () => {
-    window.open("https://github.com/MCSManager/MCSManager", "_blank");
   };
 
   const menus = computed(() => {
@@ -92,11 +72,8 @@ export function useHeaderMenus() {
         if (metaInfo.condition && !metaInfo.condition()) {
           return false;
         }
-        if (containerState.isDesignMode) {
-          return metaInfo.onlyDisplayEditMode || metaInfo.mainMenu;
-        }
         if (isAdmin.value) {
-          return metaInfo.mainMenu === true && metaInfo.onlyDisplayEditMode !== true;
+          return metaInfo.mainMenu === true && v.path !== "/customer";
         }
         return (
           metaInfo.mainMenu === true &&
@@ -112,92 +89,19 @@ export function useHeaderMenus() {
       }));
   });
 
+  // The header actions are deliberately few: theme, account, sign out. The old
+  // layout customiser (add card / save / reset / edit mode) is gone — pages are
+  // now designed, not assembled by the user.
   const appMenus = computed(() => {
     return [
       {
-        iconText: "",
-        title: "GitHub",
-        icon: GithubFilled,
-        onlyPC: true,
-        onlyHeader: true,
-        click: onClickIcon
-      },
-      {
-        title: t("TXT_CODE_8b0f8aab"),
-        icon: AppstoreAddOutlined,
-        click: openNewCardDialog,
-        conditions: containerState.isDesignMode,
-        onlyPC: true
-      },
-      {
-        title: t("TXT_CODE_8145d82"),
-        icon: SaveOutlined,
-        click: async () => {
-          Modal.confirm({
-            title: t("TXT_CODE_d73c8510"),
-            content: t("TXT_CODE_6d9b9f22"),
-            async onOk() {
-              changeDesignMode(false);
-              await saveGlobalLayoutConfig();
-              notification.success({
-                placement: "top",
-                message: t("TXT_CODE_47c35915"),
-                description: t("TXT_CODE_e10c992a")
-              });
-              setTimeout(() => window.location.reload(), 400);
-            }
-          });
-        },
-        conditions: containerState.isDesignMode,
-        onlyPC: true,
-        customClass: ["nav-button-success"]
-      },
-      {
-        title: t("TXT_CODE_5b5d6f04"),
-        icon: CloseCircleOutlined,
-        click: async () => {
-          Modal.confirm({
-            title: t("TXT_CODE_8f20c21c"),
-            content: t("TXT_CODE_9740f199"),
-            async onOk() {
-              window.location.reload();
-            }
-          });
-        },
-        conditions: containerState.isDesignMode,
-        onlyPC: true,
-        customClass: ["nav-button-warning"]
-      },
-      {
-        title: t("TXT_CODE_abd2f7e1"),
-        icon: RedoOutlined,
-        click: async () => {
-          Modal.confirm({
-            title: t("TXT_CODE_74fa2f73"),
-            content: t("TXT_CODE_f63bfe78"),
-            async onOk() {
-              await resetGlobalLayoutConfig();
-              notification.success({
-                placement: "top",
-                message: t("TXT_CODE_15c6d4eb"),
-                description: t("TXT_CODE_e10c992a")
-              });
-              setTimeout(() => window.location.reload(), 400);
-            }
-          });
-        },
-        conditions: containerState.isDesignMode,
-        onlyPC: true,
-        customClass: ["nav-button-danger"]
-      },
-      {
+        conditions: true,
         title: t("TXT_CODE_5d88a9b"),
         leftSideTitle: t("TXT_CODE_ee01c10c"),
         icon: BgColorsOutlined,
         click: (key: string) => {
           setTheme(Number(key) as AppTheme);
         },
-        conditions: !containerState.isDesignMode,
         onlyPC: false,
         menus: [
           { value: AppTheme.AUTO, title: t("TXT_CODE_dc8de4ff") },
@@ -206,40 +110,18 @@ export function useHeaderMenus() {
         ]
       },
       {
-        title: t("TXT_CODE_ebd2a6a1"),
-        leftSideTitle: t("TXT_CODE_4eb158da"),
-        icon: BuildOutlined,
-        click: (): void => {
-          Modal.confirm({
-            title: t("TXT_CODE_29e85f34"),
-            content: t("TXT_CODE_f18f65db"),
-            async onOk() {
-              changeDesignMode(true);
-              notification.warning({
-                placement: "bottom",
-                type: "warning",
-                message: t("TXT_CODE_7b1adf35"),
-                description: t("TXT_CODE_6b6f1d3")
-              });
-            }
-          });
-        },
-        conditions: !containerState.isDesignMode && isAdmin.value,
-        onlyPC: true
-      },
-      {
         title: t("TXT_CODE_8c3164c9"),
         icon: UserOutlined,
-        click: () => {
+        click: (): void => {
           appTools.showUserInfoDialog = true;
         },
-        conditions: !containerState.isDesignMode && isLogged.value,
+        conditions: isLogged.value,
         onlyPC: false
       },
       {
         title: t("TXT_CODE_2c69ab15"),
         icon: LogoutOutlined,
-        click: async () => {
+        click: async (): Promise<void> => {
           Modal.confirm({
             title: t("TXT_CODE_9654b91c"),
             async onOk() {
@@ -250,7 +132,7 @@ export function useHeaderMenus() {
           });
         },
         customClass: ["nav-button-danger"],
-        conditions: !containerState.isDesignMode && isLogged.value,
+        conditions: isLogged.value,
         onlyPC: false
       }
     ];
@@ -266,7 +148,7 @@ export function useHeaderMenus() {
     }));
     const divider: SidebarDividerEntry = { type: "divider" };
     const appEntries: (SidebarAppEntry | SidebarAppDropdownEntry)[] = appMenus.value
-      .filter((item) => item.conditions && !item.onlyHeader)
+      .filter((item) => item.conditions)
       .map((item) => {
         if (item.menus && item.menus.length > 0) {
           return {

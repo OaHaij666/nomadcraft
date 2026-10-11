@@ -1,0 +1,223 @@
+{
+  "upstream": "https://github.com/eghrhegpe/ysm-model-manager",
+  "revision": "f8d08bba123559ff8d7462dd171fc5cc2d5162a9",
+  "modifications": "Only import path aliases and TypeScript import suffixes are adapted. Rendering algorithms, materials, UV handling, mesh construction, camera fit and animation implementations are unchanged.",
+  "files": [
+    {
+      "upstream": "frontend/src/preview-3d/model/ysm-object.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/model/ysm-object.ts",
+      "gitBlob": "52db2521fcb0d0691f00b5960bf5999840a5ca04",
+      "sha256": "6c4b741ee2f5de37a717367397790a5ad4ba9e9a8c1da743c85be774d5ad826b"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/camera-setup.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/camera-setup.ts",
+      "gitBlob": "1ef325f6e0b8aae29e811ded1693ea5a74d108f5",
+      "sha256": "2398121510a24c6d0745a9d710839aa7f6ec98cd38922455e515bece235b1cf2"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/texture/texture-loader.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/texture/texture-loader.ts",
+      "gitBlob": "f98d22be95ceb98e9883747c899bb81178664aa0",
+      "sha256": "e0676269042dde71526ad4e318a0c1c1f4c9b5640e8142fd0c0e13bd76fd3ec0"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/render-budget.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/render-budget.ts",
+      "gitBlob": "a8200e899e9d5ae0549cb51d40277202ed779811",
+      "sha256": "b23cc5c8b00ef91cebf6a28dab63c1ab90920dce8c8806699df320782dd21391"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/model/spec-builder.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/model/spec-builder.ts",
+      "gitBlob": "aede29fc08e5ee2b5ca5fe66996e1d8897245eba",
+      "sha256": "1de31d8e17137fc9ff02c2f09d65dd3627cc44a53b323abba90a5ff32d683162"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/model/ysm-animation-player.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/model/ysm-animation-player.ts",
+      "gitBlob": "deecdffddb9ba246752e12085621ff7315142818",
+      "sha256": "1db369ce51ddf019824670b34c80bfbc7365a8733ce5fa91a05d877d457c09ba"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/bone/bone-list.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/bone/bone-list.ts",
+      "gitBlob": "47ab4588b1e7692bf1ea12de2e9e0f0670d5567a",
+      "sha256": "ea24bae71d270b8f7adac70ce86ece71e04ce6f7d13fce8b05c453b852842103"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/bone/bone-visibility.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/bone/bone-visibility.ts",
+      "gitBlob": "900efcb08cf08f06d2f02bbc35c67a87cea66126",
+      "sha256": "c747489a5ae1a041a487bd53e3cd044dead7cb1ac5ee2412c86e4d200c382109"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/cleanup-helper.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/cleanup-helper.ts",
+      "gitBlob": "df98c36ea53ae16bd3f868a3898248656b368ed7",
+      "sha256": "cd955151f005de59ec881f34983c484bbfd177d5abc3f1ea828997c38b231d63"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/face-split.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/face-split.ts",
+      "gitBlob": "66575e2ba28a2e3f8b4392c1e34659a5a225b38e",
+      "sha256": "6c247ad9fc8afc1c8bf997ef49025e7a089eda559f0e66de2855417419c7db7f"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/mesh.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/mesh.ts",
+      "gitBlob": "b9f7eebdc1c06013762138ba452b44ba080e9fde",
+      "sha256": "00de790e76e5b166218059bd985af1929b7b8d89f2f11cb16ef65cbdffc0bbd0"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/mesh-baker.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/mesh-baker.ts",
+      "gitBlob": "461a86d6518a362c136f3c484f723563aff05a1c",
+      "sha256": "7fdc3c41d93cd414a08964f096ef356efdfdb5958335023bea599c23d7155f83"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/mesh-builder.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/mesh-builder.ts",
+      "gitBlob": "bb9f79322d5c9c18ee0bc1dcb15be3ab981ca93c",
+      "sha256": "1ec767540667cff22ebdfea3d25a97ef52cdeaccf5a682e6c26c4b0d02352ffe"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/model3d.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/model3d.ts",
+      "gitBlob": "2a239c4f5f6bc33e15c74580d9f3dbed5b4e40b9",
+      "sha256": "3e7a0e0bb1dd841110029a3d2e501756b99ad84370054e7d2d392f9e53cf06db"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/texture/texture-alpha.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/texture/texture-alpha.ts",
+      "gitBlob": "d2fc4279d6392f009de1094109569188d0a67c77",
+      "sha256": "376b9acb8e1ff0007cb4857c7946d94da4a491d913066a4011a3033ca8566454"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/texture/texture-cache.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/texture/texture-cache.ts",
+      "gitBlob": "ca7e3c88d5e3ac0e3a0b9173faa4b610b6079228",
+      "sha256": "3623ff2329914e4a1148103a36486fdf0759152aabbde1ac4aa42303a1c83541"
+    },
+    {
+      "upstream": "frontend/src/utils/base/primitives/storage.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/base/primitives/storage.ts",
+      "gitBlob": "3a55952370d29e65b27230456787e5cf0e19c906",
+      "sha256": "ce143978f0854c4d704c5100b892d423e50ed4898dc20017d323cfe7729a7f8d"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/gpu-load.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/gpu-load.ts",
+      "gitBlob": "26c8b781fa2550a8a733e3333343ba752200b991",
+      "sha256": "c0a08e0489c2148583b354946aec125c47a575ce1198d8cd8ddf5437dd18bc73"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/gpu-load-calibrate.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/gpu-load-calibrate.ts",
+      "gitBlob": "bc1bc7bb9617fbd83f7bdec9f75ea08a230ad9a5",
+      "sha256": "ed6d68822b3bb4eb0549a48afdbe89224f2e5af8a58cf5a89e0832743595771f"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/settings-schema.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/settings-schema.ts",
+      "gitBlob": "f5c0db4107f0b34569541db710f6235eae4ec4d7",
+      "sha256": "6784e6d9515a2fca1cc4780b7cdb2a9e1f47d7281c4e820df64384315f3a6db2"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/model/model-group-builder.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/model/model-group-builder.ts",
+      "gitBlob": "44687fa0fdee3c0d9d998200113885b8c0f1f9f5",
+      "sha256": "9c2403495d4790e22ed011fa7e2b1638b411cca29be0dc2c0adb3a2f039e47af"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/animation.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/animation.ts",
+      "gitBlob": "8da27e1ee57438676a4227aedd88b911ad6e8dd6",
+      "sha256": "01df1159f2dd44faaff5c78a37ff8411dbdb211a585169a8f676fb9594e812e8"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/animation-controller.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/animation-controller.ts",
+      "gitBlob": "a11ecb52112aad1346e53489b427caeb8e4fe212",
+      "sha256": "b94b58f0871abca2e9ae57fd4a829319ccbd8608d125416e42c8964c3be0b7cd"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/animation-evaluator.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/animation-evaluator.ts",
+      "gitBlob": "4bee9639bbc298b1273a6e1f302976d8fb89ec5b",
+      "sha256": "010107bc88d8aefdca723ef8e57bf09cffdf7c14834430a102b7a2bc9f043345"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/materials/alpha-index.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/materials/alpha-index.ts",
+      "gitBlob": "65d46098170ce31447f618350ca6d094cb0bbe46",
+      "sha256": "3a634af8abef6aa92052e978cedf71fb1b1dc5b232818e98a9e1e387cd817f59"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/safe-dispose.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/safe-dispose.ts",
+      "gitBlob": "968021fd375649a4e7a9d6066d79da6255d47922",
+      "sha256": "8d19d77c873e049703d51549114ebdfc3d6b27c5a39342294c3984e06a197ba9"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/quaternion.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/quaternion.ts",
+      "gitBlob": "17a16cec6cfcb51736acc783865081be04dd7ec6",
+      "sha256": "577cbc5499f44767a71e3c8d5942d329da35ad339f755e940248ba5e97f40308"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/keymap.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/keymap.ts",
+      "gitBlob": "e2e32cabf4a9455acee5dd1af687c4509517eb50",
+      "sha256": "7fd47a4100905335c1e75ae31cacb9a66ffef9be4dc614ca249a15e97c9131db"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/infra/texture-bytes.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/infra/texture-bytes.ts",
+      "gitBlob": "711c4581b6c1e65bcc61e7143209481e45636785",
+      "sha256": "1a7a83983cf964d8f88c327309b04c47442cd8b0aac1c6ab2a3912f8854fcd41"
+    },
+    {
+      "upstream": "frontend/src/utils/base/primitives/log.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/base/primitives/log.ts",
+      "gitBlob": "f8989a395ed8994476406f68d55a9009cc77a119",
+      "sha256": "7ba18bd3fa8915eef0e588ae7eba9b49b0d67bedcd5e978ef145ae1b52d3abdf"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/deferred.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/deferred.ts",
+      "gitBlob": "9847f00fbaec2f3cd5425218dea43377b368e6aa",
+      "sha256": "306349b2a37c3b89f789c3bfec14e6b5ff42b9066968f47b14009aba459d2535"
+    },
+    {
+      "upstream": "frontend/src/preview-3d/mesh/cube-mesh.ts",
+      "local": "src/renderer/src/ysm/upstream/preview-3d/mesh/cube-mesh.ts",
+      "gitBlob": "4b605e25a72a954d51655b6d77609ed85e4030d5",
+      "sha256": "e469eb5809dd54c4370c13ae5b2608cb968de6a3e1b163577f2ed69fbf352d40"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/molang.ts",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/molang.ts",
+      "gitBlob": "4cf190e9120994fceb1d7bfcd791b64feb6eec6e",
+      "sha256": "506f5cef6c51ec3e379698ee9ebf815017b84e03e81eee5f0b70a39365c23a0e"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/molang-lib/molang.js",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/molang-lib/molang.js",
+      "gitBlob": "dabc61b227456abf92bb6eba0777064139eaf41e",
+      "sha256": "500b31aa61acf60eba346590f284094d538b34933efe6b235bc4944d84f0cb3a"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/molang-lib/math.js",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/molang-lib/math.js",
+      "gitBlob": "deff1aeed300899ced2e6a892fe95d9ba801d37e",
+      "sha256": "33b24aabf3173e98cd63991f020470414ace2779d9bbbb29b17270c9e04a768e"
+    },
+    {
+      "upstream": "frontend/src/utils/animation/molang-lib/easing.js",
+      "local": "src/renderer/src/ysm/upstream/utils/animation/molang-lib/easing.js",
+      "gitBlob": "73d05adc52860f954d74e9884f22514ceda793d4",
+      "sha256": "675fb6d5136013e7b07c8c7b92443b75afd20ed166cf24aaf08b79a1611f2b95"
+    }
+  ]
+}

@@ -21,10 +21,7 @@ onErrorCaptured((error: Error) => {
 </script>
 
 <template>
-  <div
-    :id="'layout-card-container-' + card.id"
-    class="layout-card-container transition-all-6 global-drag-animation"
-  >
+  <div :id="'layout-card-container-' + card.id" class="layout-card-container">
     <component
       :is="componentMap[card.type]"
       v-if="!loadError"
