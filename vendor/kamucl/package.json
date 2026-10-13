@@ -3,7 +3,7 @@
   "productName": "KAMUCL NC",
   "version": "0.1.0",
   "description": "KAMUCL NC - NomadCraft Minecraft desktop client",
-  "homepage": "https://github.com/kamubaba-i/KAMUCL",
+  "homepage": "https://github.com/OaHaij666/nomadcraft",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -24,7 +24,7 @@
     "appId": "com.nomadcraft.kamucl.nc",
     "productName": "KAMUCL NC",
     "directories": {
-      "output": "release"
+      "output": "../../.nomad/releases/0.1.0"
     },
     "files": [
       "out/main/**",
@@ -35,7 +35,9 @@
       "LICENSE",
       "THIRD_PARTY_NOTICES.md",
       "licenses/**",
-      "docs/CORRESPONDING_SOURCE.md"
+      "docs/CORRESPONDING_SOURCE.md",
+      "!out/renderer/nomad-panel/stats.html",
+      "!out/renderer/nomad-panel/**/*.map"
     ],
     "asar": true,
     "compression": "maximum",
@@ -73,7 +75,9 @@
         "!node_modules/koffi/lib{,/**}",
         "!node_modules/koffi/vendor{,/**}",
         "!node_modules/koffi/cnoke.cjs",
-        "!node_modules/undici/docs{,/**}"
+        "!node_modules/undici/docs{,/**}",
+        "!out/renderer/nomad-panel/stats.html",
+        "!out/renderer/nomad-panel/**/*.map"
       ],
       "target": [
         "portable",

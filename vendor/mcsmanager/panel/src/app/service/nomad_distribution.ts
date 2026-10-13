@@ -1,3 +1,4 @@
+import { NomadResourceSources } from "./nomad_resource_sources";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -55,7 +56,8 @@ export class NomadDistribution {
     private storage: () => IStorage,
     readonly catalog: NomadCatalog,
     readonly directory = path.resolve("data", "NomadDistribution"),
-    private quota = () => uploadPolicy().maxBytes
+    private quota = () => uploadPolicy().maxBytes,
+    private resourceSources = new NomadResourceSources()
   ) {}
   private async load(): Promise<DistributionState> {
     return (
@@ -340,6 +342,15 @@ export class NomadDistribution {
       d.cancelled = true;
       return { cancelled: true };
     });
+  }
+  async sources(actor: CatalogActor, instanceId: string, releaseId: string, hashes: unknown) {
+    const release = await this.release(actor, instanceId, releaseId);
+    if (!Array.isArray(hashes) || hashes.length > 100 || hashes.some(h => typeof h !== "string" || !/^[a-f0-9]{64}$/.test(h)))
+      fail(400, "invalid_distribution_hashes");
+    const requested = new Set(hashes as string[]);
+    const files = (release.manifest?.files ?? []).filter(f => requested.has(f.sha256) && f.side !== "server");
+    if ([...requested].some(h => !files.some(f => f.sha256 === h))) fail(403, "blob_outside_manifest");
+    return this.resourceSources.resolve(files, h => this.blob(h));
   }
   async authorizedBlob(actor: CatalogActor, instanceId: string, releaseId: string, hash: string) {
     const r = await this.release(actor, instanceId, releaseId);

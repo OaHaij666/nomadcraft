@@ -1,3 +1,4 @@
+import { resourceSource, publicResourcePath, type ResourceSource } from "./nomad-resource-sources";
 import { createHash } from "crypto";
 export interface DistributionFile {
   path: string;
@@ -5,6 +6,7 @@ export interface DistributionFile {
   sha256: string;
   side: "client" | "server" | "both";
   ownership: "managed" | "seed";
+  sources?: ResourceSource[];
 }
 export interface DistributionManifest {
   schema: 1;
@@ -81,14 +83,18 @@ export function validateManifest(input: unknown, maxBytes = 5 * 1024 ** 3): Dist
       sizes.set(f.sha256, f.size);
       total += f.size;
       if (!Number.isSafeInteger(total) || total > maxBytes) throw new Error("distribution_quota_exceeded");
-      return { path: p, size: f.size, sha256: f.sha256, side: f.side, ownership: f.ownership };
+      const sources = publicResourcePath(p) && Array.isArray(f.sources)
+        ? f.sources.slice(0, 4).map(resourceSource).filter((s): s is ResourceSource => !!s)
+        : [];
+      return { path: p, size: f.size, sha256: f.sha256, side: f.side, ownership: f.ownership,
+        ...(sources.length ? { sources } : {}) };
     })
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { schema: 1, files };
 }
 export function manifestDigest(m: DistributionManifest): string {
   return createHash("sha256")
-    .update(JSON.stringify(validateManifest(m, Number.MAX_SAFE_INTEGER)))
+    .update(JSON.stringify({ schema: 1, files: validateManifest(m, Number.MAX_SAFE_INTEGER).files.map(({ sources, ...file }) => file) }))
     .digest("hex");
 }
 export interface DistributionDiff {

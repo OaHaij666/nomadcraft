@@ -3,20 +3,23 @@ import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { BOOT_STAGES, StartupGate, type BootStage } from '../shared/startup'
 import { launcherLog } from './core/launcherLog'
+import { getSettings } from './core/settings'
 import { awaitNativeStartup, createNativeStartup, showStartupWindow } from './nativeStartup'
 
 /** Startup-only window coordination. This does not own or terminate Minecraft processes. */
 export async function createStartupSplash() {
   const signal = process.env.KAMUCL_BOOT_SIGNAL
-  if (signal) {
+  const harmonious = getSettings().harmoniousAppearance === true
+  if (signal && !harmonious) {
     const pid = await awaitNativeStartup(signal)
     if (pid) return createNativeStartup(signal, pid)
     try { writeFileSync(signal, 'fallback') } catch {}
   }
-  return createElectronStartupSplash()
+  if (signal && harmonious) { try { writeFileSync(signal, 'closed') } catch {} }
+  return createElectronStartupSplash(harmonious)
 }
 
-function createElectronStartupSplash() {
+function createElectronStartupSplash(harmonious = false) {
   const gate = new StartupGate()
   const bounds = screen.getPrimaryDisplay().bounds
   let main: BrowserWindow | null = null
@@ -93,8 +96,8 @@ function createElectronStartupSplash() {
   listen('boot:splash-failed', event => { if (event.sender === splash?.webContents) animationFailure('renderer failed') })
   splash.webContents.on('render-process-gone', () => animationFailure('renderer process exited'))
   const load = process.env.ELECTRON_RENDERER_URL
-    ? splash.loadURL(new URL('splash.html', process.env.ELECTRON_RENDERER_URL).toString())
-    : splash.loadFile(join(__dirname, '../renderer/splash.html'))
+    ? splash.loadURL(new URL('splash.html' + (harmonious ? '?harmonious=1' : ''), process.env.ELECTRON_RENDERER_URL).toString())
+    : splash.loadFile(join(__dirname, '../renderer/splash.html'), { query: harmonious ? { harmonious: '1' } : {} })
   void load.catch(error => animationFailure(String(error)))
   return {
     attach(window: BrowserWindow) {

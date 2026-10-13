@@ -31,3 +31,22 @@ test('117 verified client version drives Java and direct join without changing p
   assert.equal(resolved, '未知')
   assert.equal(supportsQuickPlayMultiplayer(resolved), false)
 })
+
+test('client version evidence rechecks same-size JARs even when stat timestamps collide', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kamucl-version-collision-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const file = path.join(root, 'client.jar'), originalStat = fs.lstatSync
+  t.mock.method(fs, 'lstatSync', ((...args: Parameters<typeof fs.lstatSync>) => {
+    const stat = originalStat(...args)
+    if (String(args[0]) === file) Object.assign(stat, { mtimeMs: 1000, ctimeMs: 1000 })
+    return stat
+  }) as typeof fs.lstatSync)
+  const write = (id: string) => { const zip = new AdmZip(); zip.addFile('version.json', Buffer.from(JSON.stringify({ id }))); zip.writeZip(file) }
+  write('1.20.1')
+  const beforeSize = originalStat(file).size
+  assert.equal(readClientVersionEvidence(file), '1.20.1')
+  write('1.21.1')
+  assert.equal(originalStat(file).size, beforeSize)
+  assert.equal(readClientVersionEvidence(file), '1.21.1')
+  assert.equal(readClientVersionEvidence(file), '1.21.1')
+})

@@ -19,6 +19,7 @@ export function scopeOfCategory(id: string): SettingsScope {
 }
 export type SettingsCategory = typeof settingsCategories[number]['id']
 export const settingsCatalog = [
+  { id: 'harmonious-appearance', category: 'appearance', name: '和谐外观', keywords: '和谐 简洁 图标 草方块 头像 背景 致谢 原版' },
   { id: 'theme', category: 'appearance', name: '主题与个性化', keywords: '颜色 黑紫 深色 浅色 透明 自定义 字体 外观工作台' },
   { id: 'background', category: 'appearance', name: '窗口背景', keywords: '壁纸 图片 玻璃 模糊 透明度' },
   { id: 'thumbnail', category: 'appearance', name: '首页启动卡图片', keywords: '轮播 插画 缩略图 背景 停留时间' },

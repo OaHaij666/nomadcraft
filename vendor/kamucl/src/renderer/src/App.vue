@@ -96,7 +96,9 @@ const AiCompanionView = defineAsyncComponent(() => import('./views/AiCompanionVi
 const CloudPanelView = defineAsyncComponent(() => import('./views/CloudPanelView.vue'))
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'))
 const AccountsView = defineAsyncComponent(() => import('./views/AccountsView.vue'))
-import brandHead from './assets/splash-face.png'
+import originalBrandHead from './assets/splash-face.png'
+import harmoniousBrandHead from './assets/harmonious/icon.png'
+const brandHead = computed(() => store.settings?.harmoniousAppearance ? harmoniousBrandHead : originalBrandHead)
 
 // Vite 的全局 define 在 script 中解析；模板直接访问会被 Vue 当作组件实例字段。
 const appVersion = __APP_VERSION__
@@ -1275,8 +1277,8 @@ onUnmounted(() => {
       <!-- Logo 区 -->
       <div data-ui="App:fc5fc8ba7e96" class="logo-area">
         <div class="brand-slot">
-        <button class="brand-avatar" :class="{'avatar-open':mascotOpen&&mascotReady,'avatar-preparing':mascotOpen&&!mascotReady}" :tabindex="mascotOpen?-1:0" aria-label="打开卡慕互动彩蛋" :aria-expanded="mascotOpen" :aria-busy="mascotOpen&&!mascotReady" :title="mascotOpen&&!mascotReady?'正在准备卡慕…':'打开卡慕互动彩蛋'" @click="openMascots"><img data-ui="App:0f39bd9dbfd2" class="brand-head" :src="brandHead" alt="KaMuaMua 的 Minecraft 头像" /></button>
-        <MascotStage v-if="mascotOpen" ref="mascotRef" :focus-on-ready="mascotKeyboard" @ready="mascotReady=true" @activity="mascotBusy=$event" @render-mode="mascotSoftware=$event" @close="closeMascots"/>
+        <button class="brand-avatar" :class="{'avatar-open':mascotOpen&&mascotReady,'avatar-preparing':mascotOpen&&!mascotReady}" :tabindex="mascotOpen?-1:0" :aria-label="store.settings?.harmoniousAppearance ? 'KAMUCL NC 方块标识' : '打开卡慕互动彩蛋'" :aria-expanded="mascotOpen" :aria-busy="mascotOpen&&!mascotReady" :title="store.settings?.harmoniousAppearance ? 'KAMUCL NC · 方块世界' : mascotOpen&&!mascotReady?'正在准备卡慕…':'打开卡慕互动彩蛋'" @click="store.settings?.harmoniousAppearance ? undefined : openMascots($event)"><img data-ui="App:0f39bd9dbfd2" class="brand-head" :src="brandHead" :alt="store.settings?.harmoniousAppearance ? 'KAMUCL NC 草方块标识' : 'KaMuaMua 的 Minecraft 头像'" /></button>
+        <MascotStage v-if="mascotOpen && !store.settings?.harmoniousAppearance" ref="mascotRef" :focus-on-ready="mascotKeyboard" @ready="mascotReady=true" @activity="mascotBusy=$event" @render-mode="mascotSoftware=$event" @close="closeMascots"/>
         </div>
         <div data-ui="App:7494cda29e47" class="logo-text">
           <span data-ui="App:c396a9ff34cb" class="logo-name"><span>KAMUCL</span><span class="logo-nc" aria-label="NomadCraft 版本">NC</span></span>

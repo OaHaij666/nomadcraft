@@ -1,3 +1,4 @@
+import { applyApplicationIcon } from './applicationIcon'
 import { registerCloudHostingIpc } from './core/cloudHosting'
 import { registerCloudDistributionIpc } from './core/cloudDistribution'
 import { assertCloudModsWritable } from './core/cloudResourceGuard'
@@ -228,6 +229,7 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<Settings>) => {
     const saved = settings.saveSettings(patch)
     applyNativeAppearance(getWin(), saved)
+    applyApplicationIcon(getWin(), saved.harmoniousAppearance === true)
     applyUiWindowAutoFit(getWin(), saved.uiWindowAutoFit === true)
     return saved
   })

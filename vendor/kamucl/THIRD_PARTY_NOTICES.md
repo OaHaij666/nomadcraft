@@ -147,3 +147,8 @@ YSMViewer: DrAbcOfficial/YSMViewer, revision a30baf27425a9cc206af095600e3d98e4eb
 
 Unmodified Forge 1.20.1 client component, release 0.3.1 by wolflord212312; source: https://github.com/wolflord212312/Forge-Client-Reset-Packet .
 Official Modrinth artifact aG3k2b3I; fixed checksums and source URL are recorded in bridge/client-network.json. The component is bundled to support Forge cloud host handover, and is installed only into the client. It is not installed into a compute server. Full upstream license: licenses/forge-client-reset-packet.txt.
+
+
+## Harmonious appearance assets
+
+Kenney Voxel Pack by Kenney (CC0 1.0), source: https://kenney.nl/assets/voxel-pack. The grass tile is used in the alternate application icon; full license is retained in licenses/kenney-voxel-pack.txt. The geometric landscape and icon composition were created for NomadCraft. Original KAMUCL branding and contributor credits remain available through the appearance setting.

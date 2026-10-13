@@ -23,6 +23,8 @@ export default defineConfig({
       execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-bridge.cjs')], {stdio:'inherit',windowsHide:true})
       const bridges=JSON.parse(readFileSync(resolve(__dirname,'bridge/dist/manifest.json'),'utf8'))
       for(const artifact of bridges.artifacts) copyFileSync(resolve(__dirname,'bridge/dist',artifact.file),resolve(__dirname,'out/main',artifact.loader==='fabric'?'kamucl-bridge.jar':artifact.file))
+      copyFileSync(resolve(__dirname,'build/icon-original.png'),resolve(__dirname,'out/main/icon-original.png'))
+      copyFileSync(resolve(__dirname,'build/icon-harmonious.png'),resolve(__dirname,'out/main/icon-harmonious.png'))
       copyFileSync(resolve(__dirname,'bridge/dist/ForgeClientResetPacket-0.3.1.jar'),resolve(__dirname,'out/main/ForgeClientResetPacket-0.3.1.jar'))
       execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-offline-skin-agent.cjs')], { stdio: 'inherit', windowsHide: true })
       copyFileSync(resolve(__dirname, 'offline-skin-agent/dist/kamucl-offline-skin.jar'), resolve(__dirname, 'out/main/kamucl-offline-skin.jar'))

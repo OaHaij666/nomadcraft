@@ -94,6 +94,9 @@ router.post("/publications/:id/commit", async (ctx) => {
 router.get("/instances/:id/releases/:releaseId", async (ctx) => {
   ctx.body = await distribution.release(actor(ctx), ctx.params.id, ctx.params.releaseId);
 });
+router.post("/instances/:id/releases/:releaseId/sources", async (ctx) => {
+  ctx.body = await distribution.sources(actor(ctx), ctx.params.id, ctx.params.releaseId, (ctx.request.body as any)?.hashes);
+});
 router.get("/instances/:id/releases/:releaseId/blobs/:hash", async (ctx) => {
   const file = await distribution.authorizedBlob(
     actor(ctx),

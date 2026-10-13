@@ -1,3 +1,7 @@
+import { logScope } from './launcherLog';
+import { CloudResourceCache, type ResourceLocation } from './cloudResourceCache';
+import { downloadFile } from './download';
+import { resourceSource, publicResourcePath, type ResourceSource } from '../../../../mcsmanager/shared/nomad-resource-sources';
 import { cloudInstanceFiles as files } from './cloudInstanceFiles';
 import { ensureCloudClientNetwork } from './cloudClientNetwork';
 import { syncApprovedModels } from "./cloudModels";
@@ -33,9 +37,10 @@ import {
   type DistributionFile,
 } from "../../../../mcsmanager/shared/nomad-distribution";
 import { cloudPreparePlan, cloudPreparedRoom, clientRelease } from "./cloudPreparePlan";
-import { installCloudVersion, scanInstalledFolder } from "./versions";
+import { installCloudVersion, scanInstalledFolder, listAllInstalled } from "./versions";
 import { addGameFolder } from "./gameFolders";
 import type { InstanceTarget } from "../../shared/instanceCenter";
+const resourceLog = logScope('cloud-resources');
 export interface CloudRef {
   instanceId: string;
   saveId?: string;
@@ -79,7 +84,7 @@ async function inspect(ref: CloudRef, frozen?: Awaited<ReturnType<typeof context
   const c = frozen ?? await context(ref);
   await assertInstanceIdle(c.target.dir);
   await assertSyncSettled(c.target.dir);
-  const local = await files(c.target.dir),
+  const local = await files(c.target.dir, path.join(app.getPath("userData"), "cloud-resource-cache")),
     old = await baseline(c.target.dir);
   const remote = c.release?.manifest as DistributionManifest | undefined;
   const merged: DistributionManifest = {
@@ -309,6 +314,8 @@ export function registerCloudDistributionIpc(getWin: () => BrowserWindow | null)
           await assertSyncSettled(c.target.dir);
           const task = parentTask ?? registerTask("同步云端实例", "download");
           let success = false;
+          const cache = new CloudResourceCache(path.join(app.getPath('userData'), 'cloud-resource-cache'), async () =>
+            listAllInstalled().map(v => v.gameDirectory).filter((dir): dir is string => !!dir && dir !== c.target.dir));
           const total = validateManifest(c.release.manifest, Number.MAX_SAFE_INTEGER).files.filter(f => f.side !== "server").reduce((sum, f) => sum + f.size, 0);
           let downloaded = 0;
           syncProgress(task, 0, total, "校验本地文件…");
@@ -322,48 +329,63 @@ export function registerCloudDistributionIpc(getWin: () => BrowserWindow | null)
               c.client.serviceId,
               c.release.manifestDigest,
             );
-            await fs.mkdir(temp, { recursive: true });
-            for (const f of manifest.files.filter((f) => f.side !== "server")) {
+            const sourceResults: Record<string, ResourceSource[]> = {};
+            const changedPaths = new Set(preview.diff.filter(d => d.operation !== 'same').map(d => d.path));
+            const sourcePending = manifest.files.filter(f => f.side !== 'server' && publicResourcePath(f.path) && changedPaths.has(f.path));
+            const getSources = async (file: DistributionFile) => {
+              const supplied = (file.sources ?? []).map(resourceSource).filter((s): s is ResourceSource => !!s);
+              if (supplied.length) return supplied;
+              if (!publicResourcePath(file.path)) return [];
+              if (!(file.sha256 in sourceResults)) {
+                const hashes = [...new Set([file.sha256, ...sourcePending.filter(f => !(f.sha256 in sourceResults)).map(f => f.sha256)])].slice(0, 100);
+                hashes.forEach(hash => { sourceResults[hash] = []; });
+                syncProgress(task, downloaded, total, '正在自动识别资源下载来源…');
+                try {
+                  const result = await c.client.json('api/nomad/distribution/instances/' + encodeURIComponent(ref.instanceId)
+                    + '/releases/' + encodeURIComponent(c.release.id) + '/sources', {
+                    method: 'POST', body: JSON.stringify({ hashes }), signal: task.controller.signal,
+                  });
+                  for (const hash of hashes) {
+                    sourceResults[hash] = Array.isArray(result?.[hash]) ? result[hash].map(resourceSource).filter((s: ResourceSource | undefined): s is ResourceSource => !!s) : [];
+                  }
+                } catch { task.controller.signal.throwIfAborted(); /* Older/offline servers retain cloud download compatibility. */ }
+              }
+              return sourceResults[file.sha256];
+            };
+            for (const f of manifest.files.filter((f) => f.side !== 'server')) {
               await waitIfTaskPaused(task.controller.signal);
-              const dest = path.join(temp, f.sha256);
-              if (
-                (await fs.stat(dest).catch(() => null))?.size !== f.size ||
-                (await fileDigest(dest)) !== f.sha256
-              ) {
-                const response = await c.client.raw(
-                  "api/nomad/distribution/instances/" +
-                    encodeURIComponent(ref.instanceId) +
-                    "/releases/" +
-                    encodeURIComponent(c.release.id) +
-                    "/blobs/" +
-                    f.sha256,
-                  { signal: task.controller.signal },
-                );
-                if (!response.body) throw new Error("云端文件为空");
-                const part = dest + ".part";
-                let count = 0;
-                const stream = Readable.fromWeb(response.body as any);
-                await pipeline(
-                  stream,
-                  async function* (source) {
+              const names: Record<ResourceLocation, string> = { instance: '本地已有', cache: '复用缓存', local: '复用本地资源', upstream: '从上游下载', cloud: '从云端下载' };
+              const obtained = await cache.obtain(f, {
+                instance: c.target.dir, legacy: path.join(temp, f.sha256), signal: task.controller.signal,
+                sources: () => getSources(f),
+                progress: location => syncProgress(task, downloaded, total, names[location] + '：' + f.path),
+                upstream: (dest, sources) => downloadFile(sources[0].url, dest,
+                  value => syncProgress(task, downloaded + Math.min(value, f.size), total, '从上游下载：' + f.path),
+                  undefined, getSettings().mirror, task.controller.signal, sources.slice(1).map(s => s.url),
+                  { sha256: f.sha256, size: f.size, maxAttempts: 2 }),
+                cloud: async dest => {
+                  const response = await c.client.raw('api/nomad/distribution/instances/' + encodeURIComponent(ref.instanceId)
+                    + '/releases/' + encodeURIComponent(c.release.id) + '/blobs/' + f.sha256, { signal: task.controller.signal });
+                  if (!response.body) throw new Error('云端文件为空：' + f.path);
+                  let count = 0;
+                  await pipeline(Readable.fromWeb(response.body as any), async function* (source) {
                     for await (const chunk of source) {
                       await waitIfTaskPaused(task.controller.signal);
                       count += chunk.length;
-                      if (count > f.size) throw new Error("云端文件超过声明大小");
-                      syncProgress(task, downloaded + count, total, f.path);
+                      if (count > f.size) throw new Error('云端文件超过声明大小：' + f.path);
+                      syncProgress(task, downloaded + count, total, '从云端下载：' + f.path);
                       yield chunk;
                     }
-                  },
-                  (await import("node:fs")).createWriteStream(part),
-                  { signal: task.controller.signal },
-                );
-                if (count !== f.size || (await fileDigest(part)) !== f.sha256)
-                  throw new Error("下载文件校验失败");
-                await fs.rename(part, dest);
-              }
-              staged[f.path] = dest;
+                  }, (await import('node:fs')).createWriteStream(dest), { signal: task.controller.signal });
+                  if (count !== f.size) throw new Error('云端文件大小不符：' + f.path);
+                },
+              }).catch(error => {
+                task.controller.signal.throwIfAborted();
+                throw new Error('资源准备失败：' + f.path + '；' + (error instanceof Error ? error.message : String(error)), { cause: error });
+              });
+              if (obtained.file) staged[f.path] = obtained.file;
               downloaded += f.size;
-              syncProgress(task, downloaded, total, f.path);
+              syncProgress(task, downloaded, total, names[obtained.location] + '：' + f.path);
             }
             task.controller.signal.throwIfAborted();
             const result = await applyFiles(
@@ -396,6 +418,7 @@ export function registerCloudDistributionIpc(getWin: () => BrowserWindow | null)
             success = true;
             return result;
           } finally {
+            await cache.close().catch(error => resourceLog.warn("资源缓存清理失败", error));
             if (!parentTask) { done(task, success); finishTask(task.id); }
           }
         }),

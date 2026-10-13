@@ -55,6 +55,7 @@ import type {
 import { trackBootTask } from '../bootTasks'
 import { managedImageUrl } from '../managedAssets'
 import { builtInLaunchImages } from '../launchImages'
+import harmoniousLandscape from '../assets/harmonious/landscape.webp'
 
 const homeYsm=ref<DefaultYsm>({enabled:false,previewOnHome:true})
 const homePreviewMode=ref<'skin'|'ysm'>('skin')
@@ -102,6 +103,7 @@ const instanceBanners = computed(() => {
 })
 
 const banners = computed(() => {
+  if (store.settings?.harmoniousAppearance) return [{ path: 'harmonious-landscape', src: harmoniousLandscape, fit: 'cover' as const, custom: false }]
   const instance = instanceBanners.value.filter(item => !failedBanners.value.has(item.path))
   return instance.length ? instance : globalBanners.value.filter(item => !failedBanners.value.has(item.path))
 })
@@ -165,7 +167,7 @@ function startBannerTimer() {
 }
 
 watch(
-  () => JSON.stringify([instanceBanners.value, globalBanners.value, appearancePreview.value?.launchThumbnail.intervalSeconds, appearancePreview.value?.launchThumbnail.durations, appearancePreview.value?.launchThumbnail.randomPlayback]),
+  () => JSON.stringify([store.settings?.harmoniousAppearance, instanceBanners.value, globalBanners.value, appearancePreview.value?.launchThumbnail.intervalSeconds, appearancePreview.value?.launchThumbnail.durations, appearancePreview.value?.launchThumbnail.randomPlayback]),
   () => {
     failedBanners.value = new Set()
     startBannerTimer()

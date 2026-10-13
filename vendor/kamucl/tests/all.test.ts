@@ -260,3 +260,5 @@ import './player-bridge-targets.test'
 import './cloud-instance-files.test'
 
 import './numen-local-roster.test'
+
+import './cloud-resource-cache.test'

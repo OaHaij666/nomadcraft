@@ -1,3 +1,6 @@
+import { rememberResourceOrigin } from './cloudResourceOrigins'
+import { resourceSource } from '../../../../mcsmanager/shared/nomad-resource-sources'
+import { logScope } from './launcherLog'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -30,6 +33,11 @@ export async function prepareModpackFiles(
         await fs.promises.mkdir(path.dirname(task.installDest), { recursive: true })
         // Copy, never hard-link: edits made by mods must not mutate the shared cache.
         await fs.promises.copyFile(task.dest, task.installDest)
+        const source = resourceSource({ provider: 'modrinth', url: task.url }) ?? resourceSource({ provider: 'curseforge', url: task.url })
+        if (source) {
+          try { const { app } = await import('electron'); await rememberResourceOrigin(path.join(app.getPath('userData'), 'cloud-resource-cache'), task.installDest, source.provider, source.url) }
+          catch (error) { logScope('cloud-resources').warn('整合包资源来源记录失败，云端发布时将自动识别', error) }
+        }
       }
     } }
   } catch (error) {

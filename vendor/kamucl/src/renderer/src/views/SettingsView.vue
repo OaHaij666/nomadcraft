@@ -651,6 +651,10 @@ function reloadLauncher(): void { window.location.reload() }
     </div>
 
     <template v-else>
+      <div v-if="store.settings && category === 'appearance'" class="card group group-inline setting-target" data-section="harmonious-appearance" tabindex="-1">
+        <div><h3 class="group-title">和谐外观</h3><p class="muted">使用草方块标识、方块山林背景和简洁的致谢文案。关闭可恢复原版外观，作者与贡献者署名始终保留。</p><p class="muted">界面与窗口图标立即生效；发行包的 EXE 文件图标固定使用草方块。</p></div>
+        <label class="switch"><input type="checkbox" aria-label="和谐外观" :checked="store.settings.harmoniousAppearance === true" @change="save({ harmoniousAppearance: ($event.target as HTMLInputElement).checked })"/><span class="switch-ui"/></label>
+      </div>
       <!-- 外观主题（PCL 式折叠卡片：标题行 + 箭头，展开内容统一内边距） -->
       <AppearanceThemeCard v-show="category === 'appearance'" />
 

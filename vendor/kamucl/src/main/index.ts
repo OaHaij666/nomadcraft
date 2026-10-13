@@ -1,3 +1,4 @@
+import { applicationIcon, applyApplicationIcon } from './applicationIcon'
 import { app, BrowserWindow, crashReporter, shell, ipcMain, net, protocol, type BrowserWindowConstructorOptions } from 'electron'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -111,7 +112,7 @@ function createWindow(startup?: Awaited<ReturnType<typeof createStartupSplash>>)
   if (autoFit) initialWindow = adaptiveWindowOptions(initialWindow)
   win = new BrowserWindow({
     ...initialWindow,
-    icon: join(__dirname, '../../build/icon.png'),
+    icon: applicationIcon(getSettings().harmoniousAppearance === true),
     show: false,
     title: 'KAMUCL',
     webPreferences: {
@@ -128,6 +129,7 @@ function createWindow(startup?: Awaited<ReturnType<typeof createStartupSplash>>)
   else   win.on('ready-to-show', () => win?.show())
   win.webContents.once('did-finish-load', () => { void frpManager.restore().catch(error => launcherLogWarn('frp', '恢复隧道失败', error)) })
   applyNativeAppearance(win, getSettings())
+  applyApplicationIcon(win, getSettings().harmoniousAppearance === true)
   if (process.platform === 'win32' && windowState) restoreWindowBounds(win, autoFit
     ? { ...windowState, width: initialWindow.width!, height: initialWindow.height!, x: initialWindow.x, y: initialWindow.y }
     : windowState)

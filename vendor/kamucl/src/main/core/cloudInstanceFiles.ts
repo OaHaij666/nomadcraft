@@ -1,10 +1,12 @@
+import { resourceOrigins } from './cloudResourceOrigins'
+import { publicResourcePath } from '../../../../mcsmanager/shared/nomad-resource-sources'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import clientNetwork from '../../../bridge/client-network.json'
 import { fileDigest, confinedFile } from './cloudSyncFiles'
 import { distributionPath, type DistributionFile } from '../../../../mcsmanager/shared/nomad-distribution'
 
-export async function cloudInstanceFiles(directory: string) {
+export async function cloudInstanceFiles(directory: string, originsDirectory?: string) {
   const result: DistributionFile[] = [];
   for (const top of [
     "mods",
@@ -39,7 +41,9 @@ export async function cloudInstanceFiles(directory: string) {
         const file = await confinedFile(directory, p),
           stat = await fs.stat(file);
         const digest = await fileDigest(file);
+        const sources = originsDirectory && publicResourcePath(p) ? await resourceOrigins(originsDirectory, digest) : [];
         result.push({
+          ...(sources.length ? { sources } : {}),
           path: p,
           size: stat.size,
           sha256: digest,

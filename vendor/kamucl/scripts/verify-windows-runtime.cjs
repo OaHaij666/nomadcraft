@@ -17,7 +17,18 @@ function verifyWindowsRuntime(appOutDir) {
     illustrationBytes += bytes.length
   }
   assert(illustrationBytes < 11 * 1024 * 1024, 'Illustrations exceed reviewed 11 MiB budget')
-  assert(fs.statSync(archive).size - illustrationBytes < 16 * 1024 * 1024, 'Application code/dependencies exceed 16 MiB: review payload growth before release')
+  let panelBytes = 0
+  for (const name of names.filter(name => name.startsWith('out/renderer/nomad-panel/'))) {
+    const entry = asar.statFile(archive, name.split('/').join(path.sep))
+    if (entry.files) continue
+    assert(!/stats\.html$|\.map$/.test(name), 'Development-only panel file included: ' + name)
+    const bytes = asar.extractFile(archive, name.split('/').join(path.sep))
+    const source = fs.readFileSync(path.resolve(__dirname, '../', name))
+    assert.equal(digest(bytes), digest(source), 'Bundled cloud interface changed: ' + name)
+    panelBytes += bytes.length
+  }
+  assert(panelBytes < 12 * 1024 * 1024, 'Cloud interface exceeds reviewed 12 MiB budget')
+  assert(fs.statSync(archive).size - illustrationBytes - panelBytes < 16 * 1024 * 1024, 'Application code/dependencies exceed 16 MiB: review payload growth before release')
   for (const name of names) {
     const entry = asar.statFile(archive, name.split('/').join(path.sep))
     if (entry.files) continue

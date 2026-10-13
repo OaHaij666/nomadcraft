@@ -1,4 +1,6 @@
-import faceUrl from './assets/splash-face.png'
+import originalFaceUrl from './assets/splash-face.png'
+import harmoniousFaceUrl from './assets/harmonious/icon.png'
+const faceUrl = new URLSearchParams(location.search).get('harmonious') === '1' ? harmoniousFaceUrl : originalFaceUrl
 import { makeBootGlass, advanceBootGlass, glassPosition, canAssembleBoot, GLASS_FLOAT_MIN_MS, CONVERGE_DURATION, ASSEMBLED_HOLD_MS, BOOT_FRAME_MS, type BootState, type GlassPoint } from '@shared/startup'
 import './splash.css'
 

@@ -1,3 +1,4 @@
+import { rememberResourceOrigin } from './cloudResourceOrigins'
 /**
  * 社区资源：Modrinth / CurseForge（MCIM 镜像免 key）的搜索、文件列表与下载
  * - Modrinth 主备双域名互备（官方 api + MCIM 镜像）
@@ -787,5 +788,7 @@ async function communityDownloadInFolder(
   if (!sub) throw new Error(`不支持的资源类型: ${target.kind}`)
   const dest = path.join(base, sub, fileName)
   await transfer(dest)
+  try { const { app } = await import('electron'); await rememberResourceOrigin(path.join(app.getPath('userData'), 'cloud-resource-cache'), dest, file.source ?? '', file.url) }
+  catch (error) { communityLog.warn('资源来源记录失败，云端发布时将自动识别', error) }
   return dest
 }

@@ -25,7 +25,6 @@ export function readClientVersionEvidence(file: string): string | undefined {
     if (!stat.isFile() || stat.isSymbolicLink()) return undefined
     const identity = `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
     const previous = cached.get(file)
-    if (previous?.identity === identity) return previous.version
     handle = fs.openSync(file, 'r')
     const read = (offset: number, size: number): Buffer => {
       if (offset < 0 || size < 0 || offset + size > stat.size) throw new Error('Invalid ZIP boundary')
@@ -44,6 +43,7 @@ export function readClientVersionEvidence(file: string): string | undefined {
     if (count === 0xffff || length === 0xffffffff || cursor === 0xffffffff || cursor + length > stat.size) return undefined
     const limit = cursor + length
     let version: string | undefined
+    let observedIdentity = identity
     for (let index = 0; index < count; index++) {
       const central = read(cursor, 46)
       if (central.readUInt32LE(0) !== 0x02014b50) throw new Error('Invalid ZIP directory')
@@ -61,6 +61,7 @@ export function readClientVersionEvidence(file: string): string | undefined {
       if (read(offset + 30, localNameSize).toString('utf8') !== name) break
       const body = read(offset + 30 + localNameSize + local.readUInt16LE(28), compressed)
       const entryIdentity = identity + ':' + central.readUInt32LE(16) + ':' + crypto.createHash('sha256').update(body).digest('hex')
+      observedIdentity = entryIdentity
       if (previous?.identity === entryIdentity) return previous.version
       const data = method === 8 ? inflateRawSync(body, { maxOutputLength: MAX_METADATA }) : body
       if (data.length !== expanded || crc32(data) !== central.readUInt32LE(16)) break
@@ -68,7 +69,7 @@ export function readClientVersionEvidence(file: string): string | undefined {
       if (isMinecraftVersionId(id)) version = id
       break
     }
-    cached.set(file, { identity, version })
+    cached.set(file, { identity: observedIdentity, version })
     if (cached.size > 32) cached.delete(cached.keys().next().value!)
     return version
   } catch { return undefined }

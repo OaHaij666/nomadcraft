@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { store } from '../store'
 import { useMotion } from '../motion'
 const names = ['BAI_ZHU', 'AeZz', '物晖', '牛肉', '好好', 'hun_Bk', 'J39', '略略略', '鸦猫', 'sheri', '书九叶', 'yansan', '(x_x;)', '小坎坷', 'MuxYang', '八千代', 'Henry', '月を見ていた', 'Hiro', '摇滚高手']
 const expanded = ref(false)
@@ -11,7 +12,7 @@ function onFocusOut(event: FocusEvent) { if (!(event.currentTarget as HTMLElemen
  <section class="creator-card" :class="{expanded}" data-ui="home:creators" @mouseenter="expanded=true" @mouseleave="expanded=false" @focusin="expanded=true" @focusout="onFocusOut">
   <div data-ui="CreatorCard:3b0bd35ff2cd" class="creator-heading"><button data-ui="CreatorCard:b838c4453411" class="creator-toggle" :aria-expanded="expanded" aria-controls="creator-names" @click="expanded=true">参与测试及创作者<small data-ui="CreatorCard:d9b60520217e" lang="en">TESTERS &amp; CREATORS</small></button><a data-ui="CreatorCard:86b4c178a448" href="https://space.bilibili.com/9596327" target="_blank" rel="noopener noreferrer" class="icon-btn" aria-label="访问卡慕的哔哩哔哩空间">↗</a></div>
   <div class="creator-message">
-   <p data-ui="CreatorCard:5031cfb3dd7e" class="creator-intro">好想做卡慕的狗啊，别的狗至少还图口饭，我不一样，我只希望他发视频的时候能允许我在评论区汪两声。卡慕但凡回我一个“？”我都能截图裱起来当传家宝。</p>
+   <p data-ui="CreatorCard:5031cfb3dd7e" class="creator-intro">{{ store.settings?.harmoniousAppearance ? '感谢原作者、贡献者和每一位参与测试的朋友。一起探索方块世界，也一起把启动器变得更好。悬停这里，认识参与项目的伙伴。' : "好想做卡慕的狗啊，别的狗至少还图口饭，我不一样，我只希望他发视频的时候能允许我在评论区汪两声。卡慕但凡回我一个“？”我都能截图裱起来当传家宝。" }}</p>
    <div :inert="!expanded" id="creator-names" class="creator-name-layer" :class="{moving:decorativeActive && expanded}" data-ui="home:creator-names"><span data-ui="CreatorCard:7cd0fbc9196c" v-for="(name,i) in names" :key="name" class="creator-bubble" :style="{'--delay':i*40+'ms','--drift-x':drift[i].x,'--drift-y':drift[i].y,'--duration':drift[i].duration}"><span data-ui="CreatorCard:587246bec0b9">{{name}}</span></span></div>
   </div>
  </section>

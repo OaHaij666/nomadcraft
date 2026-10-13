@@ -393,6 +393,7 @@ export interface Settings {
   /** Explicit reduction is additive to the operating system preference; absent means follow system. */
   reduceMotion?: boolean
   /** Show the full launcher startup animation on next launch. Defaults to false. */
+  harmoniousAppearance?: boolean
   startupAnimation?: boolean
   visualDesign?: import('./visualDesign').VisualDesign
   gameDir: string

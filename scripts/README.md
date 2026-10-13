@@ -64,3 +64,6 @@ Fabric 可在 `handover-live.cjs` 传入 `--graphical` 使用真实图形 Minecr
 `--native-close` 可以在离线诊断回归中验证定向窗口关闭。它只向匹配本轮诊断目录的 Java 游戏窗口发送关闭请求，并确认进程退出。正版模式自动采用这一方式，保留原启动器窗口。
 
 跨机器验证传入 `--proxy=http://127.0.0.1:<端口>` 时，本轮 SSH 私有回环隧道也会让远程 Java 使用同一下载代理；不改服务器全局代理，退出时解除隧道。只接受不含凭据和额外路径的本机 HTTP 代理。
+
+
+设置 `NC_TEST_RESOURCE_DISTRIBUTION=1` 后运行 `verify/cloud-prepare.cjs`，会在隔离后端和桌面配置中验证自动资源分发：使用真实固定版 Fabric API 0.92.2+1.20.1，不在发布清单中预设来源；由后端自动识别，启动器从真实 CDN 下载。仅在隔离后端记录不含凭据的文件下载请求路径，断言公开 MOD 不从云端下载、自定义配置从云端下载，并验证缓存补齐、重复准备及文件更新。`NC_TEST_PROXY` 指定本次下载代理，默认本机 7897；`NC_PLAYWRIGHT_MODULE` 指定已安装的 Playwright。报告为 `.nomad/diagnostics/reports/resource-distribution-desktop-proof.json`。此流程使用合成的 Minecraft 运行文件验收安装与同步，不启动游戏，也不代表正版认证或游戏兼容性验收。

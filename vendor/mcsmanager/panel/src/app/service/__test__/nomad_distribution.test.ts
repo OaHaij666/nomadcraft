@@ -263,3 +263,14 @@ describe("manifest distribution", () => {
  it('scope cancellation and quota restrictions survive durable receiver metadata',async()=>{const federation=new NomadFederation(service);await service.mutate(state=>{state.jobs.push({id:'job',actorId:admin.id,state:'uploading'})});await expect(federation.cancel(member,'job')).rejects.toMatchObject({code:'forbidden'});await federation.cancel(admin,'job');expect((await federation.jobs(admin))[0].state).toBe('cancelled');await service.mutate(state=>{state.jobs[0].state='committing'});await expect(federation.cancel(admin,'job')).rejects.toMatchObject({code:'commit_in_progress'});await service.mutate(state=>{state.jobs[0].state='complete'});await expect(federation.cancel(admin,'job')).rejects.toMatchObject({code:'already_committed'});const huge={schema:1 as const,files:[{...manifest.files[0],size:2*1024*1024}]};const grant=await federation.acceptance(admin,{sourceServiceId:'source',sourceInstanceId:'instance',releaseId:'release',digest:manifestDigest(huge)});await expect(federation.receive(grant.token,{manifest:huge,sourceServiceId:'source',sourceInstanceId:'instance',releaseId:'release',profile:DEFAULT_PROFILE},()=>admin)).rejects.toThrow('quota');});
 
 });
+
+it("source discovery is scoped to an accessible release and client resources", async () => {
+  const i = await instance(), d = await draft(i);
+  await service.chunk(admin, d.id, hash, 0, Readable.from([content]));
+  const release = await service.commit(admin, d.id);
+  await expect(service.sources(member, i.id, release.id, [hash])).rejects.toMatchObject({ status: 403 });
+  await expect(service.sources(admin, i.id, release.id, ["0".repeat(64)])).rejects.toMatchObject({ code: "blob_outside_manifest" });
+  await expect(service.sources(admin, i.id, release.id, ["invalid"])).rejects.toMatchObject({ code: "invalid_distribution_hashes" });
+  await expect(service.sources(admin, i.id, release.id, Array(101).fill(hash))).rejects.toMatchObject({ code: "invalid_distribution_hashes" });
+  expect(await service.sources(admin, i.id, release.id, [])).toEqual({});
+});
