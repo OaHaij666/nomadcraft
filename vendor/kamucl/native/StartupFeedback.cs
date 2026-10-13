@@ -161,6 +161,8 @@ sealed class StartupFeedback : Form {
         if(clock.ElapsedMilliseconds>90000){Close();return;}
         string command="";try{if(File.Exists(signal))command=File.ReadAllText(signal);}catch{}
         if(command=="closed"||command=="fallback"){Close();return;}
+        // Wait for the application setting before presenting any frame.
+        if(String.IsNullOrEmpty(command))return;
         if(command.StartsWith("loading\n"))caption=command.Substring(8);
         if(command.StartsWith("assembling\n"))caption=command.Substring(11);
         double now=clock.Elapsed.TotalMilliseconds;

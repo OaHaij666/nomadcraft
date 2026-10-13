@@ -1,6 +1,7 @@
 import { applicationIcon, applyApplicationIcon } from './applicationIcon'
 import { app, BrowserWindow, crashReporter, shell, ipcMain, net, protocol, type BrowserWindowConstructorOptions } from 'electron'
 import { dirname, join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { createStartupSplash } from './startupSplash'
 import { prepareStartupFrames } from './startupRendering'
@@ -212,6 +213,10 @@ function createWindow(startup?: Awaited<ReturnType<typeof createStartupSplash>>)
 app.whenReady().then(async () => {
   initializeLauncherLog()
   launcherLogInfo('main', `Electron 就绪（版本 ${app.getVersion()}）`)
+  // The portable helper must not remain visible when animation is disabled.
+  if (getSettings().startupAnimation !== true && process.env.KAMUCL_BOOT_SIGNAL) {
+    try { writeFileSync(process.env.KAMUCL_BOOT_SIGNAL, 'closed') } catch (error) { launcherLogWarn('startup', '关闭原生启动提示失败', error) }
+  }
   if (await applyUpdateOnStartup()) return
   const startup = getSettings().startupAnimation === true ? await createStartupSplash() : undefined
   launcherLogInfo('main', startup ? '启动闪屏已创建' : '启动动画已关闭，直接显示主窗口')

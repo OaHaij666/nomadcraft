@@ -21,7 +21,8 @@ function repairPortableScript(script, options = {}) {
   const old = 'ExecWait "$INSTDIR\\${APP_EXECUTABLE_FILENAME} $R0" $0'
   const fixed = `ExecWait '\"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}\" $R0' $0`
   if (script.split(old).length !== 2) throw new Error('Portable NSIS template changed: review quoted launch command before release')
-  script = script.replace(old, `ClearErrors\n\t${fixed}\n\tIfErrors 0 +3\n\tMessageBox MB_OK|MB_ICONSTOP 'KAMUCL could not start. Please extract the Windows unpacked ZIP package and run KAMUCL.exe.'\n\tStrCpy $0 1\n  FileOpen $R8 "$PLUGINSDIR\\startup.done" w\n  FileClose $R8`)
+  script = script.replace(old, `ClearErrors\n\t${fixed}\n\tIfErrors 0 +3\n\tMessageBox MB_OK|MB_ICONSTOP 'KAMUCL could not start. Please extract the Windows unpacked ZIP package and run KAMUCL.exe.'\n\tStrCpy $0 1\n  FileOpen $R8 "$PLUGINSDIR\\startup.done" w\n  FileWrite $R8 "closed"
+  FileClose $R8`)
   const key = options.cacheKey || 'test-cache'
   const feedback = options.feedback || require('node:path').resolve(__dirname, '../out/main/StartupFeedback.exe')
   script = `; KAMUCL_EARLY_FEEDBACK\n!define KAMUCL_CACHE_KEY "${key}"\nVar runtimeMutex\n${script}`

@@ -11,6 +11,7 @@ export async function createStartupSplash() {
   const signal = process.env.KAMUCL_BOOT_SIGNAL
   const harmonious = getSettings().harmoniousAppearance === true
   if (signal && !harmonious) {
+    try { writeFileSync(signal, 'loading\n正在启动…') } catch {}
     const pid = await awaitNativeStartup(signal)
     if (pid) return createNativeStartup(signal, pid)
     try { writeFileSync(signal, 'fallback') } catch {}
