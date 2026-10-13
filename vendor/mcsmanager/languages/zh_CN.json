@@ -3757,5 +3757,11 @@
   "TXT_CODE_COMPUTE_NETWORK_INVALID_VARINT": "游戏协议数据格式无效",
   "TXT_CODE_COMPUTE_NETWORK_NOT_MINECRAFT_STATUS": "端口返回的不是 Minecraft 状态",
   "TXT_CODE_COMPUTE_NETWORK_ROOM_NOT_READY_FOR_PROTOCOL_PROBE": "房间未就绪，无法据此判断游戏可用性",
-  "TXT_CODE_COMPUTE_NETWORK_EXTERNAL_PROBE_REQUIRED": "公网可达性尚未从外部网络验证"
+  "TXT_CODE_COMPUTE_NETWORK_EXTERNAL_PROBE_REQUIRED": "公网可达性尚未从外部网络验证",
+  "TXT_CODE_nomad_sync_hosting": "同步与托管",
+  "TXT_CODE_CATALOG_PERM_bots_private_create": "添加私有机器人",
+  "TXT_CODE_CATALOG_PERM_bots_shared_create": "创建公有机器人",
+  "TXT_CODE_CATALOG_PERM_bots_manage": "管理公有机器人",
+  "TXT_CODE_CATALOG_PERM_bots_approve": "审核机器人接入",
+  "TXT_CODE_CATALOG_PERM_models_approve": "审核模型上传"
 }

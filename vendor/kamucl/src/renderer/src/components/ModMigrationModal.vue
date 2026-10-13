@@ -5,7 +5,7 @@ import type { ModMigrationPlan } from '@shared/modMigration'
 import MinecraftVersionPicker from './MinecraftVersionPicker.vue'
 import SelectMenu from './SelectMenu.vue'
 import { getModIcons, errText } from '../api'
-import { store, toast } from '../store'
+import { store, toast, displayVersionName } from '../store'
 const props=defineProps<{source:InstalledVersion}>(),emit=defineEmits<{(e:'close'):void}>()
 const mc=ref(''),loader=ref<LoaderName>(props.source.loader||'fabric'),plan=ref<ModMigrationPlan>(),checking=ref(false),starting=ref(false),error=ref(''),confirmed=ref(false),icons=ref<Record<string,string>>({})
 const folder=props.source.folder||store.settings!.activeFolder||store.settings!.gameDir
@@ -23,7 +23,7 @@ async function start(){if(!plan.value||starting.value||(attention.value&&!confir
 <Teleport to="body"><div class="modal-mask" @pointerdown.self="!starting && emit('close')"><section class="modal migration-modal" role="dialog" aria-modal="true" aria-labelledby="migration-title">
 <header><div><h2 id="migration-title">版本迁移</h2><p class="muted">将当前模组迁移到新的隔离实例，原版本保持完整。</p></div><button class="btn btn-ghost" aria-label="关闭版本迁移" :disabled="starting" @click="emit('close')">×</button></header>
 <div class="migration-body">
-<div class="migration-route"><div><small class="muted">当前版本</small><strong>{{source.name||source.id}}</strong><span class="muted">{{source.mcVersion}} · {{source.loader}}</span></div><span aria-hidden="true">→</span><div><label>目标 Minecraft 版本<MinecraftVersionPicker v-model="mc" :disabled="starting"/></label><label>加载器<SelectMenu v-model="loader" :disabled="starting" :options="[{value:'fabric',label:'Fabric'},{value:'forge',label:'Forge'},{value:'neoforge',label:'NeoForge'},{value:'quilt',label:'Quilt'}]"/></label></div></div>
+<div class="migration-route"><div><small class="muted">当前版本</small><strong>{{displayVersionName(source)}}</strong><span class="muted">{{source.mcVersion}} · {{source.loader}}</span></div><span aria-hidden="true">→</span><div><label>目标 Minecraft 版本<MinecraftVersionPicker v-model="mc" :disabled="starting"/></label><label>加载器<SelectMenu v-model="loader" :disabled="starting" :options="[{value:'fabric',label:'Fabric'},{value:'forge',label:'Forge'},{value:'neoforge',label:'NeoForge'},{value:'quilt',label:'Quilt'}]"/></label></div></div>
 <p class="migration-hint">迁移模组及必要前置，保留启停状态。新实例自动安装游戏与加载器；存档、资源包和配置文件仍保留在原实例。</p>
 <div v-if="error" class="migration-error" role="alert">{{error}}</div><div v-if="checking" class="migration-loading"><span class="spin"/> 正在检查每个模组的适配版本与前置依赖…</div>
 <template v-if="plan"><div class="migration-summary"><strong>检查完成</strong><span>{{plan.entries.filter(e=>e.status==='compatible').length}} 个可迁移</span><span>{{plan.entries.filter(e=>e.status==='dependency').length}} 个新增前置</span><button class="btn btn-ghost btn-sm" @click="onlyMissing=!onlyMissing">{{unavailable.length}} 个未匹配{{onlyMissing?' · 显示全部':''}}</button></div><input v-model="query" class="input" placeholder="搜索本地文件名或模组名称"/>

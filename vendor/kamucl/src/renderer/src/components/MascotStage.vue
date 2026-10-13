@@ -66,6 +66,7 @@ function confirmGpuDraw(){
  if(!gl||gpuFence||disposed||hidden.value)return
  try{
   const context=gl.getContext();if(context.isContextLost()){useSoftware('WebGL context lost before first draw');return}
+  if (!('fenceSync' in context)) { useSoftware('WebGL2 fence unavailable'); return }
   const fence=context.fenceSync(context.SYNC_GPU_COMMANDS_COMPLETE,0);if(!fence){useSoftware('WebGL first draw fence unavailable');return}
   gpuContext=context;gpuFence=fence;gpuStarted=performance.now();data('gpuReadyStatus','pending');context.flush()
   // This is only a failure boundary. A naturally signalled fence publishes immediately.

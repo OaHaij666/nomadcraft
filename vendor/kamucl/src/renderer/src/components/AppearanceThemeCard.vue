@@ -40,7 +40,7 @@ function chooseTheme(theme: ThemeName) {
               v-for="theme in themeOptions"
               :key="theme.key"
               class="theme-option"
-              :class="{ active: store.settings.theme === theme.key }"
+              :class="{ active: store.settings?.theme === theme.key }"
               :title="theme.description"
               @click="chooseTheme(theme.key)"
             >
@@ -84,7 +84,7 @@ function chooseTheme(theme: ThemeName) {
                   <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
                   <circle cx="16.5" cy="11.5" r="1" fill="currentColor" stroke="none" />
                 </svg>
-                <svg v-if="store.settings.theme === theme.key" class="tp-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                <svg v-if="store.settings?.theme === theme.key" class="tp-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </span>
               <span data-ui="SettingsView:6e56a2fb3976" class="theme-label">{{ theme.label }}</span>
             </button>

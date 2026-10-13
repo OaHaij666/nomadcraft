@@ -55,7 +55,7 @@ export function parseModelReply(body: any, protocol: AiSettings['protocol']): Mo
 export class AiModelClient {
   constructor(readonly settings: AiSettings, private key: string, private transport: typeof fetch = fetch) {}
   async call(system: string, history: BrainMessage[], tools: NumenTool[], signal: AbortSignal): Promise<ModelReply> {
-    const response = await this.transport(modelEndpoint(this.settings.baseUrl, this.settings.protocol), { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...(this.settings.protocol === 'anthropic' ? { 'x-api-key': this.key, 'anthropic-version': '2023-06-01' } : this.key ? { Authorization: 'Bearer ' + this.key } : {}) }, body: JSON.stringify(modelPayload(this.settings, system, history, tools)), signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]) })
+    const response = await this.transport(modelEndpoint(this.settings.baseUrl, this.settings.protocol), { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...(this.settings.protocol === 'anthropic' ? { 'x-api-key': this.key, 'anthropic-version': '2023-06-01' } : this.key ? { Authorization: 'Bearer ' + this.key } : {}) }, body: JSON.stringify(modelPayload(this.settings, system, history, tools)), signal: (AbortSignal as typeof AbortSignal & {any(signals:AbortSignal[]):AbortSignal}).any([signal, AbortSignal.timeout(120000)]) })
     if (!response.ok) { await response.body?.cancel(); throw new Error('模型服务请求失败（HTTP ' + response.status + '），请检查地址、模型、密钥和余额') }
     const body = JSON.parse(await boundedText(response))
     if (body.error) throw new Error('模型服务返回错误，请检查模型名称和服务配置')

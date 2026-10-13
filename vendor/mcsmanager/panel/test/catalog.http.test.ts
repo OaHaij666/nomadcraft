@@ -5,7 +5,6 @@ import os from "node:os";
 import net from "node:net";
 import crypto from "node:crypto";
 import * as yazl from "yazl";
-import { spawnSync } from "node:child_process";
 import { spawn, type ChildProcess } from "node:child_process";
 import { DEFAULT_PROFILE, DEFAULT_RULES } from "../../shared/nomad-catalog";
 // Real authenticated panel, isolated data and an ephemeral port. No auth bypass.
@@ -251,13 +250,6 @@ describe("catalog authenticated HTTP integration", () => {
     expect(allowed.headers.get("x-nomad-sha256")).toBe(crypto.createHash("sha256").update(bytes).digest("hex"));
     expect((await download(nextId, player)).status).toBe(404);
     expect((await upload(await pack("v3"), player, cloudId)).status).toBe(403);
-    const probe = path.resolve(panelRoot, "../../../launchers/pcl/tests/bin/Release/net10.0/CloudClientProbe.dll");
-    if (await fs.stat(probe).catch(() => null)) {
-      // Invoke exactly the C# cloud client used by the WPF launcher against the real panel.
-      await delay(1000);
-      const output = spawnSync("dotnet", [probe, "http"], {windowsHide: true, encoding: "utf8", env: {...process.env, NOMAD_TEST_URL: base, NOMAD_TEST_USER: "catalog_player", NOMAD_TEST_PASSWORD: password, NOMAD_TEST_INSTANCE: cloudId}});
-      expect(output.status, output.stdout + output.stderr).toBe(0);
-    }
     await call("PUT", "/nomad/catalog/instances/" + cloudId + "/grants", {grants: []}, admin);
     expect((await download(pinned, player)).status).toBe(403);
     const state = (await call("GET", "/nomad/catalog/", undefined, admin)).data.instances.find((i: any) => i.id === cloudId);

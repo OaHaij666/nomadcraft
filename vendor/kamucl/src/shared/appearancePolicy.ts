@@ -11,7 +11,7 @@ export function carouselTiming(settings: Partial<LaunchThumbnailSettings>) {
 }
 /** `images` is authoritative, including []; old single-image settings remain readable. */
 export function carouselImages(thumbnail?: Partial<LaunchThumbnailSettings>): string[] {
-  const values = Array.isArray(thumbnail?.images) ? thumbnail.images : [thumbnail?.image]
+  const values = Array.isArray(thumbnail?.images) ? thumbnail!.images : [thumbnail?.image]
   return [...new Set(values.filter((s): s is string => typeof s === 'string' && !!s.trim()))].slice(0, MAX_CAROUSEL_IMAGES)
 }
 
@@ -19,14 +19,14 @@ export function carouselImages(thumbnail?: Partial<LaunchThumbnailSettings>): st
 export function carouselKeys(thumbnail?: Partial<LaunchThumbnailSettings>): string[] {
   const available = [...BUILTIN_LAUNCH_IMAGES.map(image => image.key), ...carouselImages(thumbnail)]
   const allowed = new Set(available)
-  const order = Array.isArray(thumbnail?.order) ? thumbnail.order : []
+  const order = Array.isArray(thumbnail?.order) ? thumbnail!.order : []
   return [...new Set([...order.filter(key => typeof key === 'string' && allowed.has(key)), ...available])]
 }
 
 export function carouselSelection(thumbnail?: Partial<LaunchThumbnailSettings>): { order: string[]; disabled: string[] } {
   const order = carouselKeys(thumbnail)
   const allowed = new Set(order)
-  const disabled = Array.isArray(thumbnail?.disabled) ? thumbnail.disabled : []
+  const disabled = Array.isArray(thumbnail?.disabled) ? thumbnail!.disabled : []
   return { order, disabled: [...new Set(disabled.filter(key => typeof key === 'string' && allowed.has(key)))] }
 }
 

@@ -4,11 +4,14 @@ import { setAppLoadingError, setLoadingTitle } from "./tools/dom";
 import { AppTheme, THEME_KEY } from "./types/const";
 import { isAppMode } from "./utils/appMode";
 
+const embeddedDesktop = window.location.protocol === "kamucl-panel:";
+const loadingText = (zh: string, en: string) => embeddedDesktop ? zh : en;
+
 function handleLoadingError(error: any) {
   console.error("Init app error:", error);
   const errorMessage = String(error?.message || error);
   if (errorMessage.toLowerCase().includes("request failed with status code 500")) {
-    setAppLoadingError("The backend is currently unavailable, please try again later.");
+    setAppLoadingError(loadingText("云端服务暂时不可用，请稍后重试。", "The backend is currently unavailable, please try again later."));
     return;
   }
   setAppLoadingError(errorMessage);
@@ -32,14 +35,14 @@ async function initApp() {
     const { state, updatePanelStatus } = useAppStateStore();
     const token = embeddedSessionToken();
     if (token) state.userInfo = { token } as any;
-    setLoadingTitle("Initializing Application...");
+    setLoadingTitle(loadingText("正在初始化云端界面…", "Initializing Application..."));
     await updatePanelStatus();
-    setLoadingTitle("Initializing Language...");
+    setLoadingTitle(loadingText("正在加载中文界面…", "Initializing Language..."));
     await initI18n(state.language);
     document.title = "NomadCraft";
-    setLoadingTitle("Downloading JavaScript Files...");
+    setLoadingTitle(loadingText("正在准备内置界面…", "Preparing Application..."));
     const module = await import("./mount");
-    setLoadingTitle("Rendering Application...");
+    setLoadingTitle(loadingText("正在显示云端界面…", "Rendering Application..."));
     await module.mountApp();
   } catch (error: any) {
     handleLoadingError(error);

@@ -12,9 +12,10 @@ import { httpFetch } from '../src/main/core/httpClient'
 import { downloadLimiter, DEFAULT_DOWNLOAD_LIMITS } from '../src/main/core/downloadLimits'
 import { resetHostHealthForTest, slowSpeedThresholds } from '../src/main/core/download'
 import { cancelTaskAndWait, finishTask, pauseTask, registerTask, resumeTask } from '../src/main/core/tasks'
-import { fetchSha256Sums, updateBodyPolicy } from '../src/main/core/selfUpdate'
+import { fetchSha256SumsForSource, updateBodyPolicy } from '../src/main/core/selfUpdate'
 import { UPDATE_MIRROR_PRESETS, normalizeUpdateMirrorUrl } from '../src/shared/updateMirrors'
 
+const fetchSha256Sums = (hint: string, fetcher: Parameters<typeof fetchSha256SumsForSource>[2], signal?: AbortSignal) => fetchSha256SumsForSource({repository:'NCFixture/Launcher',apiBase:'https://api.github.com'},hint,fetcher,signal)
 const hash = (data: Buffer | string) => crypto.createHash('sha256').update(data).digest('hex')
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 async function fixture(handler: http.RequestListener) {
@@ -35,7 +36,7 @@ function rangeResponse(req: http.IncomingMessage, res: http.ServerResponse, body
 }
 
 test('update source preferences retain presets, append normalized legacy/new mirrors and exclude unsafe prefixes', () => {
-  const asset = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const asset = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   const settings = { updateMirrorUrl: 'https://legacy.example/proxy', updateMirrorUrls: [' https://custom.example ', 'https://ghproxy.net/', 'http://plain.example/', 'https://user:pass@example.org/', 'https://example.org/?token=x'] }
   const mirrors = [...UPDATE_MIRROR_PRESETS.map(prefix => prefix + asset), 'https://legacy.example/proxy/' + asset, 'https://custom.example/' + asset]
   assert.deepEqual(updateDownloadCandidates(asset, settings), [asset, ...mirrors])
@@ -233,7 +234,7 @@ test('cancelling useful update transfer leaves the previous package intact and n
   const pending = downloadUpdatePayload({ urls: [s.url], dest, sha256: hash(body), size: body.length }, undefined, task.controller.signal)
     .then(() => null, error => error).finally(() => finishTask(task.id))
   try {
-    while (!started) await wait(10)
+    {const deadline=Date.now()+2000;while(!started&&Date.now()<deadline)await wait(10);assert(started,'Official API fixture request never started')}
     await wait(40)
     await cancelTaskAndWait(task.id)
     assert.match((await pending).message, /取消/)
@@ -279,7 +280,7 @@ test('same-origin redirects preserve authorization and CF keys are recomputed on
 })
 
 test('checksum lookup cancellation propagates before probes or useful transfer', async () => {
-  const controller = new AbortController(), hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const controller = new AbortController(), hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   let calls = 0
   const pending = fetchSha256Sums(hint, async (_url, _etag, signal) => {
     calls++
@@ -291,7 +292,7 @@ test('checksum lookup cancellation propagates before probes or useful transfer',
 })
 
 test('official exact-release API digest permits verified mirror transfer when the checksum CDN is unavailable', async () => {
-  const hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe', calls: string[] = []
+  const hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe', calls: string[] = []
   const digest = hash('official payload')
   const result = await fetchSha256Sums(hint, async url => {
     calls.push(url)
@@ -299,11 +300,11 @@ test('official exact-release API digest permits verified mirror transfer when th
     return Response.json({ tag_name: 'v1.1.20', assets: [{ name: 'KAMUCL-1.1.20.exe', browser_download_url: hint, size: 1024, digest: 'sha256:' + digest }] })
   })
   assert.equal(result?.get('KAMUCL-1.1.20.exe'), digest)
-  assert.deepEqual(calls, [hint.replace(/[^/]+$/, 'SHA256SUMS.txt'), 'https://api.github.com/repos/kamubaba-i/KAMUCL/releases/tags/v1.1.20'])
+  assert.deepEqual(calls, [hint.replace(/[^/]+$/, 'SHA256SUMS.txt'), 'https://api.github.com/repos/NCFixture/Launcher/releases/tags/v1.1.20'])
 })
 
 test('API digest fallback rejects wrong release, wrong origin, invalid hash and unpublished assets', async () => {
-  const hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   const release = { tag_name: 'v1.1.20', assets: [{ name: 'KAMUCL-1.1.20.exe', browser_download_url: hint, size: 1024, digest: 'sha256:' + hash('official') }] }
   for (const changed of [
     { ...release, tag_name: 'v1.1.21' },
@@ -319,7 +320,7 @@ test('API digest fallback rejects wrong release, wrong origin, invalid hash and 
 })
 
 test('a stalled official API JSON body is cancelled by its own deadline after headers arrive', async () => {
-  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   let closed = false
   updateBodyPolicy.timeoutMs = 120
   try {
@@ -334,7 +335,7 @@ test('a stalled official API JSON body is cancelled by its own deadline after he
 })
 
 test('oversized official API JSON cannot provide a checksum and is closed before parsing', async () => {
-  const hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   let closed = false
   const result = await fetchSha256Sums(hint, async url => url.includes('/releases/tags/')
     ? new Response(new ReadableStream({ start(controller) { controller.enqueue(Buffer.alloc(updateBodyPolicy.maxBytes + 1, 32)) }, cancel() { closed = true } }))
@@ -344,7 +345,7 @@ test('oversized official API JSON cannot provide a checksum and is closed before
 })
 
 test('real HTTP API headers followed by a hung JSON body time out and close the socket', async () => {
-  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   let closed = false
   const s = await fixture((_req, res) => { res.on('close', () => { closed = true }); res.writeHead(200, { 'content-type': 'application/json' }); res.write('{"tag_name":"v1.1.20","assets":[') })
   updateBodyPolicy.timeoutMs = 120
@@ -357,7 +358,7 @@ test('real HTTP API headers followed by a hung JSON body time out and close the 
 })
 
 test('a paused API body consumes no active deadline; cancellation closes its pending read before returning', async () => {
-  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
+  const old = updateBodyPolicy.timeoutMs, hint = 'https://github.com/NCFixture/Launcher/releases/download/v1.1.20/KAMUCL-1.1.20.exe'
   let closed = false, started = false, settled = false
   const s = await fixture((_req, res) => { started = true; res.on('close', () => { closed = true }); res.writeHead(200, { 'content-type': 'application/json' }); res.write('{') })
   const task = registerTask('官方校验API正文暂停取消测试', 'download')
@@ -373,4 +374,10 @@ test('a paused API body consumes no active deadline; cancellation closes its pen
     assert.match((await pending).message, /取消/)
     await wait(40); assert.equal(closed, true)
   } finally { updateBodyPolicy.timeoutMs = old; finishTask(task.id); await s.close() }
+})
+
+test('checksum source rejects an arbitrary API mirror and credential-bearing API URL before fetching', async () => {
+ let called=false;const fetcher=async()=>{called=true;return new Response('',{status:404})}
+ for(const apiBase of ['https://mirror.example.com','https://user:secret@api.github.com','http://api.github.com'])await assert.rejects(fetchSha256SumsForSource({repository:'NCFixture/Launcher',apiBase},undefined,fetcher),/Invalid official update API source/)
+ assert.equal(called,false)
 })

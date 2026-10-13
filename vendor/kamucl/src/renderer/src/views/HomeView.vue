@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCloudInstance } from '../cloudPreparation'
 import { openInstanceCenter } from '../instanceCenter'
 import { appearancePreview } from '../visualDesign'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
@@ -21,7 +22,7 @@ import {
   showFolderContextMenu
 } from '../api'
 import {
-  selectedLauncherInstance, isCloudInstance, cloudCan, activeInstalled, selectInstance, selectCloudInstance,
+  selectedLauncherInstance, isCloudInstance, cloudCan, cloudSyncTone, cloudSyncText, activeInstalled, selectInstance, selectCloudInstance,
   displayVersionName,
   displayVersionSub,
   fmtLastPlayed,
@@ -192,7 +193,7 @@ const percent = computed(() =>
 )
 const launchText = computed(() => {
   if (launching.value) return store.progress?.text || '正在启动…'
-  if (isCloudInstance(currentVersion.value)) return '打开云端实例'
+  if (isCloudInstance(currentVersion.value)) return '准备并加入'
   return running.value ? '再次启动' : launchFailed.value ? '重新启动' : '开始游戏'
 })
 // ---------------- 快捷行悬浮浮块（跟随指针在三格间平滑滑动） ----------------
@@ -230,8 +231,7 @@ async function startVersion(id: string, createCommandWorld = false) {
   const selected = currentVersion.value
   if (isCloudInstance(selected)) {
     if (!cloudCan(selected, 'instance.read')) { toast('当前账号没有读取此云端实例的权限', 'error'); return }
-    store.currentView = 'friends'
-    toast('云端实例需要在 NomadCraft 云端入口中进入或管理', 'info')
+    await useCloudInstance(selected, true)
     return
   }
   selectedId.value = id
@@ -276,7 +276,7 @@ async function onLaunchClick() {
 }
 
 function openVersionSettings() {
-  if (isCloudInstance(currentVersion.value)) { store.currentView = 'friends'; toast('云端实例的设置由 NomadCraft 权限控制', 'info'); return }
+  store.gameInstanceTab = isCloudInstance(currentVersion.value) || !currentVersion.value ? 'cloud' : 'installed'
   if (selectedId.value) localStorage.setItem(LAST_VERSION_KEY, selectedId.value)
   store.currentView = 'game'
 }
@@ -455,7 +455,8 @@ function chooseVersion(id: string) {
   versionMenu.open = false
 }
 function chooseCloudVersion(id: string) {
-  selectCloudInstance(id)
+  const version = store.cloudInstances.find(v => v.id === id)
+  if (version) void useCloudInstance(version)
   versionMenu.open = false
 }
 
@@ -559,7 +560,7 @@ onUnmounted(() => {
 
           <div data-ui="HomeView:b9457a1e78a6" class="hero-actions">
             <div data-ui="HomeView:8079f9c9866a" class="hero-secondary-actions">
-              <button data-ui="HomeView:f170f5154efb" class="hero-settings" :disabled="!currentVersion" @click="openVersionSettings">
+              <button data-ui="HomeView:f170f5154efb" class="hero-settings" @click="openVersionSettings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1.4 1.68V21h-4v-.08A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3 13.6H3v-4h.08A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10.4 3H14a1.7 1.7 0 0 0 1.4 1.6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10.4V14a1.7 1.7 0 0 0-1.6 1Z" /></svg>
                 版本设置
               </button>

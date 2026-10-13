@@ -3757,5 +3757,11 @@
   "TXT_CODE_COMPUTE_NETWORK_INVALID_VARINT": "Malformed protocol packet",
   "TXT_CODE_COMPUTE_NETWORK_NOT_MINECRAFT_STATUS": "Endpoint did not return Minecraft status",
   "TXT_CODE_COMPUTE_NETWORK_ROOM_NOT_READY_FOR_PROTOCOL_PROBE": "Room is not ready; a game protocol test is inconclusive",
-  "TXT_CODE_COMPUTE_NETWORK_EXTERNAL_PROBE_REQUIRED": "Public reachability is not verified from an external network"
+  "TXT_CODE_COMPUTE_NETWORK_EXTERNAL_PROBE_REQUIRED": "Public reachability is not verified from an external network",
+  "TXT_CODE_nomad_sync_hosting": "Sync & hosting",
+  "TXT_CODE_CATALOG_PERM_bots_private_create": "Add private bots",
+  "TXT_CODE_CATALOG_PERM_bots_shared_create": "Create shared bots",
+  "TXT_CODE_CATALOG_PERM_bots_manage": "Manage shared bots",
+  "TXT_CODE_CATALOG_PERM_bots_approve": "Review bot admissions",
+  "TXT_CODE_CATALOG_PERM_models_approve": "Review model uploads"
 }

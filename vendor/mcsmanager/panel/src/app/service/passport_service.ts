@@ -34,8 +34,8 @@ function rememberEmbeddedToken(token: string, user: User): void {
   embeddedTokens.set(token, { uuid: user.uuid, userName: user.userName, expiresAt: Date.now() + EMBEDDED_TOKEN_TTL });
 }
 
-function embeddedTokenUser(ctx: Koa.ParameterizedContext): User | undefined {
-  const token = typeof ctx.query.token === "string" ? ctx.query.token : "";
+export function embeddedTokenUser(ctx: Koa.ParameterizedContext): User | undefined {
+  const token = ctx.get('Authorization').startsWith('Bearer ') ? ctx.get('Authorization').slice(7) : typeof ctx.query.token === 'string' ? ctx.query.token : '';
   if (!token) return undefined;
   const entry = embeddedTokens.get(token);
   if (!entry) return undefined;
@@ -101,7 +101,7 @@ export function loginSuccess(ctx: Koa.ParameterizedContext, userName: string) {
 
   logger.info($t("TXT_CODE_42036f92"));
   logger.info(`[LOGIN] IP: ${ip} Login ${userName} successful!`);
-  logger.info(`[LOGIN] Token: ${ctx.session["token"]}`);
+  logger.info('[LOGIN] Session created');
   logger.info($t("TXT_CODE_42036f92"));
 
   return String(ctx.session["token"]);
@@ -224,7 +224,7 @@ export function getUserUuid(ctx: Koa.ParameterizedContext): string {
 }
 
 export function getToken(ctx: Koa.ParameterizedContext): string {
-  return (typeof ctx.query.token === "string" && ctx.query.token) || ctx.session?.["token"] || "";
+  return (ctx.get('Authorization').startsWith('Bearer ') && ctx.get('Authorization').slice(7)) || (typeof ctx.query.token === 'string' && ctx.query.token) || ctx.session?.['token'] || '';
 }
 
 export function isAjax(ctx: Koa.ParameterizedContext) {

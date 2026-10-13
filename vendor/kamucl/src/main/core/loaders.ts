@@ -165,7 +165,7 @@ export async function resolveForgeInstallerUrl(
     await waitIfTaskPaused(signal)
     signal?.throwIfAborted()
     const timeout = AbortSignal.timeout(4000)
-    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+    const requestSignal = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
     try {
       // Use Chromium's OS/PAC route on the desktop just like the version
       // catalog. Node fetch alone can miss the player's configured proxy.

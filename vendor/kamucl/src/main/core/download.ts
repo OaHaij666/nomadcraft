@@ -147,7 +147,7 @@ let diskProbe: ((dir: string) => { bavail: number; bsize: number }) | null = nul
 export function setStatfsProbeForTest(probe: typeof diskProbe): void { diskProbe = probe }
 export function fetchSignal(signal?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(120_000)
-  return signal ? AbortSignal.any([signal, timeout]) : timeout
+  return signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
 }
 export async function verifyFile(file: string, expected: Integrity, signal?: AbortSignal): Promise<string | null> {
   signal?.throwIfAborted()

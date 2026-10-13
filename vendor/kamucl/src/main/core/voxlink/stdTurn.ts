@@ -66,7 +66,7 @@ export class StdTurnCodec implements RudpCodec {
   decode(packet:Buffer):Buffer|null{if(packet.length<4||packet.readUInt16BE(0)!==this.channel||this.channel<0x4000||this.channel>0x7fff)return null;const length=packet.readUInt16BE(2);return length+4<=packet.length?packet.subarray(4,4+length):null}
 }
 export async function fetchTurnCredential(api:ApiClient,base:string,room:{code:string;clientId:string;token:string},nodeId:string,signal:AbortSignal):Promise<TurnCredential>{
-  const data=await api.do(base,'POST','/relay/stdturn/cred',{}, {roomCode:room.code,clientId:room.clientId,token:room.token,nodeId},AbortSignal.any([signal,AbortSignal.timeout(5000)])) as TurnCredential
+  const data=await api.do(base,'POST','/relay/stdturn/cred',{}, {roomCode:room.code,clientId:room.clientId,token:room.token,nodeId},(AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal,AbortSignal.timeout(5000)])) as TurnCredential
   signal.throwIfAborted()
   if(!data||!validTurnEndpoint(data.host,data.port)||typeof data.username!=='string'||!data.username||typeof data.password!=='string'||!data.password)throw Error('标准 TURN 凭证不完整')
   return data

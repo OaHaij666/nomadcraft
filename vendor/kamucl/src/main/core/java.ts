@@ -884,7 +884,7 @@ export function requiredMajor(versionJson: VersionJson, verifiedMcVersion?: stri
 }
 
 const officialJava = createOfficialJavaReader(() => path.join(app.getPath('userData'), 'java-version-metadata'), async (url, signal) => {
-  const response = await httpFetch(url, { systemProxy: true, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) })
+  const response = await httpFetch(url, { systemProxy: true, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) })
   if (!response.ok) { await response.body?.cancel(); throw new Error(`官方 Java 元数据 HTTP ${response.status}`) }
   return response.text()
 })
@@ -984,7 +984,7 @@ async function downloadAndExtractJava(need: number, emit: ProgressEmit, architec
   const arch = (architecture ?? process.arch) === 'arm64' ? 'aarch64' : 'x64'
   const report = (text: string): void => { javaLog.info(text); emit({ stage: 'java', progress: 0, text }) }
   const read = async (url: string): Promise<unknown> => {
-    const response = await httpFetch(url, { systemProxy: true, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) })
+    const response = await httpFetch(url, { systemProxy: true, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) })
     if (!response.ok) { await response.body?.cancel(); throw new Error(`${new URL(url).hostname} HTTP ${response.status}`) }
     return response.json()
   }
@@ -995,7 +995,7 @@ async function downloadAndExtractJava(need: number, emit: ProgressEmit, architec
     const archive = path.join(staging, IS_WIN ? 'runtime.zip' : 'runtime.tar.gz')
     const extracted = path.join(staging, 'unpacked')
     try {
-      const size = await javaPackageSize(pkg, url => httpFetch(url, { method: 'HEAD', systemProxy: true, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) }))
+      const size = await javaPackageSize(pkg, url => httpFetch(url, { method: 'HEAD', systemProxy: true, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) }))
       signal?.throwIfAborted()
       await downloadFile(pkg.url, archive, (done, total) => emit({ stage: 'java', progress: total ? done / total * .85 : 0, bytesDone: done, text: `下载 Java ${need} · ${pkg.provider} ${(done / 1048576).toFixed(1)}${total ? '/' + (total / 1048576).toFixed(1) : ''} MB` }), undefined, 'official', signal, [], { sha256: pkg.sha256, size, systemProxy: true, maxAttempts: 2 })
       emit({ stage: 'java', progress: .9, text: `校验通过，正在解压 Java ${need} · ${pkg.provider}` })

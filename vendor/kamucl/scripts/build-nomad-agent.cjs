@@ -1,0 +1,2 @@
+const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
+const root=path.resolve(__dirname,'../../..');const extension=process.platform==='win32'?'.exe':'';const binary=path.join(root,'target/release/nomad-agent'+extension);cp.execFileSync('cargo',['build','--release','-p','nomad-agent'],{cwd:root,stdio:'inherit',windowsHide:true});fs.copyFileSync(binary,path.resolve(__dirname,'../out/main/nomad-agent'+extension));

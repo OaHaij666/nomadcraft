@@ -37,10 +37,15 @@ const capabilities: CatalogPermission[] = [
   "save.update",
   "save.delete",
   "room.manage",
-  "mods.manage"
+  "mods.manage",
+  "bots.private.create",
+  "bots.shared.create",
+  "bots.manage",
+  "bots.approve",
+  "models.approve"
 ];
 const scoped = (p: CatalogPermission) =>
-  !["instance.update", "save.create", "mods.manage"].includes(p);
+  !["instance.update", "save.create", "mods.manage", "bots.private.create", "bots.shared.create", "bots.manage", "bots.approve", "models.approve"].includes(p);
 const changeScope = (grant: AccessGrant) => {
   if (grant.scope !== "instance") grant.permissions = grant.permissions.filter(scoped);
 };
@@ -64,9 +69,7 @@ const userName = (id: string) => props.users.find((u) => u.id === id)?.name ?? i
       <a-button v-if="editable" @click="add">+ {{ ct("ADD_MEMBER") }}</a-button>
     </div>
     <div class="owner-row">
-      <strong>{{ ct("OWNER") }}</strong
-      ><span>{{ instance.ownerName }}</span
-      ><a-tag>{{ ct("FULL_CONTROL") }}</a-tag>
+      <strong>{{ ct("OWNER") }}</strong><span>{{ instance.ownerName }}</span><a-tag>{{ ct("FULL_CONTROL") }}</a-tag>
     </div>
     <a-empty v-if="!grants.length" :description="ct('NO_MEMBERS')" />
     <article v-for="(grant, index) in grants" :key="index" class="grant-card">
@@ -86,40 +89,45 @@ const userName = (id: string) => props.users.find((u) => u.id === id)?.name ?? i
               String(option.label).toLowerCase().includes(input.toLowerCase())
           "
         /><strong v-else>{{ userName(grant.userId) }}</strong>
-        <a-select v-model:value="grant.scope" :disabled="!editable" @change="changeScope(grant)"
-          ><a-select-option value="instance">{{ ct("INSTANCE_SCOPE") }}</a-select-option
-          ><a-select-option v-for="save in instance.saves" :key="save.id" :value="save.id">{{
-            save.name
-          }}</a-select-option></a-select
-        >
+        <a-select v-model:value="grant.scope" :disabled="!editable" @change="changeScope(grant)">
+          <a-select-option value="instance">{{ ct("INSTANCE_SCOPE") }}</a-select-option><a-select-option v-for="save in instance.saves" :key="save.id" :value="save.id">
+            {{
+              save.name
+            }}
+          </a-select-option>
+        </a-select>
         <a-select
           v-if="editable"
           :placeholder="ct('ROLE_PRESET')"
           @change="(value) => preset(grant, String(value))"
-          ><a-select-option value="viewer">{{ ct("ROLE_viewer") }}</a-select-option
-          ><a-select-option value="operator">{{ ct("ROLE_operator") }}</a-select-option
-          ><a-select-option value="manager">{{ ct("ROLE_manager") }}</a-select-option></a-select
         >
-        <a-button v-if="editable" danger type="text" @click="grants.splice(index, 1)">{{
-          ct("REMOVE")
-        }}</a-button>
+          <a-select-option value="viewer">{{ ct("ROLE_viewer") }}</a-select-option><a-select-option value="operator">{{ ct("ROLE_operator") }}</a-select-option><a-select-option value="manager">{{ ct("ROLE_manager") }}</a-select-option>
+        </a-select>
+        <a-button v-if="editable" danger type="text" @click="grants.splice(index, 1)">
+          {{
+            ct("REMOVE")
+          }}
+        </a-button>
       </div>
       <a-checkbox-group
         v-model:value="grant.permissions"
         class="permission-grid"
         :disabled="!editable"
-        ><a-checkbox
+      >
+        <a-checkbox
           v-for="permission in capabilities.filter((p) => grant.scope === 'instance' || scoped(p))"
           :key="permission"
           :value="permission"
-          >{{ ct("PERM_" + permission.replace(".", "_")) }}</a-checkbox
-        ></a-checkbox-group
-      >
+        >
+          {{ ct("PERM_" + permission.replace(/\./g, "_")) }}
+        </a-checkbox>
+      </a-checkbox-group>
       <div class="hosting-row">
-        <a-checkbox v-model:checked="grant.hosting" :disabled="!editable">{{
-          ct("HOSTING_ALLOW")
-        }}</a-checkbox
-        ><span>{{ ct("HOSTING_NO_ADMIN") }}</span>
+        <a-checkbox v-model:checked="grant.hosting" :disabled="!editable">
+          {{
+            ct("HOSTING_ALLOW")
+          }}
+        </a-checkbox><span>{{ ct("HOSTING_NO_ADMIN") }}</span>
       </div>
     </article>
     <a-button
@@ -128,8 +136,9 @@ const userName = (id: string) => props.users.find((u) => u.id === id)?.name ?? i
       :loading="busy"
       :disabled="grants.some((g) => !g.userId)"
       @click="emit('submit', grants)"
-      >{{ ct("SAVE_ACCESS") }}</a-button
     >
+      {{ ct("SAVE_ACCESS") }}
+    </a-button>
     <p class="policy-note">{{ ct("ACCESS_OWNER_NOTE") }}</p>
   </section>
 </template>

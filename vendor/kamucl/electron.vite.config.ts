@@ -10,13 +10,20 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')
 export default defineConfig({
   main: {
     plugins: [{ name: 'kamucl-native-material', closeBundle() {
+      execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-nomad-agent.cjs')], { stdio: 'inherit', windowsHide: true })
       execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-ysm-viewer.cjs')], { stdio: 'inherit', windowsHide: true })
       cpSync(resolve(__dirname, 'ysm-runtime'), resolve(__dirname, 'out/main/ysm-runtime'), { recursive: true })
       execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-native.cjs')], { stdio: 'inherit', windowsHide: true })
+      execFileSync(process.execPath, [resolve(__dirname, '../../apps/numen-adapter/build.cjs')], {stdio:'inherit',windowsHide:true})
+      const adapters = JSON.parse(readFileSync(resolve(__dirname, '../../apps/numen-adapter/dist/manifest.json'), 'utf8'))
+      for (const artifact of adapters.artifacts) copyFileSync(resolve(__dirname, '../../apps/numen-adapter/dist', artifact.file), resolve(__dirname, 'out/main', artifact.file))
+      copyFileSync(resolve(__dirname, '../../apps/numen-adapter/dist/manifest.json'), resolve(__dirname, 'out/main/nomad-numen-adapters.json'))
+      copyFileSync(resolve(__dirname, '../../apps/numen-adapter/dist/nomad-numen-adapter-fabric-1.21.1.jar'), resolve(__dirname, 'out/main/nomad-numen-adapter.jar'))
       // 内置桥接 MOD：随启动器分发，面板可一键装入实例 mods 目录
-      const bridgeJar = resolve(__dirname, 'bridge/dist/kamucl-bridge-1.0.1.jar')
-      if (existsSync(bridgeJar)) copyFileSync(bridgeJar, resolve(__dirname, 'out/main/kamucl-bridge.jar'))
-      else throw new Error('[kamucl] bridge/dist/kamucl-bridge-1.0.1.jar missing; run node scripts/build-bridge.cjs')
+      execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-bridge.cjs')], {stdio:'inherit',windowsHide:true})
+      const bridges=JSON.parse(readFileSync(resolve(__dirname,'bridge/dist/manifest.json'),'utf8'))
+      for(const artifact of bridges.artifacts) copyFileSync(resolve(__dirname,'bridge/dist',artifact.file),resolve(__dirname,'out/main',artifact.loader==='fabric'?'kamucl-bridge.jar':artifact.file))
+      copyFileSync(resolve(__dirname,'bridge/dist/ForgeClientResetPacket-0.3.1.jar'),resolve(__dirname,'out/main/ForgeClientResetPacket-0.3.1.jar'))
       execFileSync(process.execPath, [resolve(__dirname, 'scripts/build-offline-skin-agent.cjs')], { stdio: 'inherit', windowsHide: true })
       copyFileSync(resolve(__dirname, 'offline-skin-agent/dist/kamucl-offline-skin.jar'), resolve(__dirname, 'out/main/kamucl-offline-skin.jar'))
     } }],

@@ -50,7 +50,7 @@ export async function resolveNativeIntegrity<T extends { url?: string; sha1?: st
   if (!trustedChecksumUrl(url) || task.url !== url.slice(0, -5)) throw new Error('原生库校验来源无效')
   const cached = nativeChecksum(url)
   if (cached) { task.sha1 = cached; return task }
-  const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000)
+  const combined = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000)
   const response = await httpFetch(url, { signal: combined, systemProxy: true })
   if (!response.ok) { await response.body?.cancel(); throw new Error(`无法取得 ${path.basename(task.url)} 的官方 ARM64 校验值（HTTP ${response.status}），未使用 x64 替代`) }
   const reader = response.body?.getReader()

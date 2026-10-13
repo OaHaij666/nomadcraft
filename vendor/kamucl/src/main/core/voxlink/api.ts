@@ -28,7 +28,7 @@ export class ApiClient {
     const url = new URL(base); url.searchParams.set('route', route)
     for (const [name, values] of Object.entries(query)) for (const value of Array.isArray(values) ? values : [values]) if (value != null) url.searchParams.append(name, String(value))
     try {
-      const response = await fetch(url, { method, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs), headers: { 'User-Agent': this.userAgent, 'X-VoxLink-Version': APP_VERSION, 'Content-Type': 'application/json' }, ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}) })
+      const response = await fetch(url, { method, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs), headers: { 'User-Agent': this.userAgent, 'X-VoxLink-Version': APP_VERSION, 'Content-Type': 'application/json' }, ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}) })
       const reader = response.body?.getReader(); const chunks: Uint8Array[] = []; let size = 0
       try {
         if (reader) while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > MAX_RESPONSE_LEN) throw new APIError('RESPONSE_LIMIT', '服务器响应过大', response.status); chunks.push(part.value) }

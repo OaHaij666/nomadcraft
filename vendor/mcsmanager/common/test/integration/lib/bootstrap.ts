@@ -1,3 +1,4 @@
+import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -24,6 +25,13 @@ export interface Runtime {
 // process.cwd()-relative in MCSManager. The panel auto-discovers the sibling
 // daemon at ../daemon/data/Config/global.json, so the sibling-dir layout
 // (workDir/{daemon,panel}) is load-bearing.
+async function availablePort(): Promise<number> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const port = (server.address() as net.AddressInfo).port;
+  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  return port;
+}
 export async function bootRuntime(): Promise<Runtime> {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcsm-it-"));
   const daemonDir = path.join(workDir, "daemon");
@@ -38,6 +46,11 @@ export async function bootRuntime(): Promise<Runtime> {
   if (fs.existsSync(mc)) fs.copyFileSync(mc, path.join(panelDir, "data", "market_cache.json"));
 
   world.workDir = workDir;
+  const daemonPort = await availablePort(), panelPort = await availablePort();
+  fs.mkdirSync(path.join(daemonDir, "data/Config"), { recursive: true });
+  fs.writeFileSync(path.join(daemonDir, "data/Config/global.json"), JSON.stringify({version: 2, ip: "127.0.0.1", port: daemonPort}));
+  fs.mkdirSync(path.join(panelDir, "data/SystemConfig"), { recursive: true });
+  fs.writeFileSync(path.join(panelDir, "data/SystemConfig/config.json"), JSON.stringify({httpIp: "127.0.0.1", httpPort: panelPort, language: "en_us"}));
 
   // 1) start daemon (detached => own process group for clean group-kill)
   const daemonProc = spawnApp({
@@ -57,8 +70,10 @@ export async function bootRuntime(): Promise<Runtime> {
 
   const key = "mcsm-it-" + Math.random().toString(36).slice(2, 14);
   world.key = key;
-  const panelUrl = "http://127.0.0.1:23333";
-  const daemonHttpUrl = "http://127.0.0.1:24444";
+  const panelUrl = "http://127.0.0.1:" + panelPort;
+  const daemonHttpUrl = "http://127.0.0.1:" + daemonPort;
+  world.panelUrl = panelUrl;
+  world.daemonHttpUrl = daemonHttpUrl;
 
   // 2) start panel with the integration-test flag
   const panelProc = spawnApp({

@@ -1,3 +1,5 @@
+import nomadBotsRouter from './routers/nomad_bots_router';
+import nomadDistributionRouter from './routers/nomad_distribution_router';
 import Router from "@koa/router";
 import Koa from "koa";
 
@@ -48,5 +50,7 @@ export function mountRouters(app: Koa<Koa.DefaultState, Koa.DefaultContext>) {
   apiRouter.use(modManagerRouter.routes()).use(modManagerRouter.allowedMethods());
   apiRouter.use(upgradeRouter.routes()).use(upgradeRouter.allowedMethods());
 
+  apiRouter.use(nomadBotsRouter.routes()).use(nomadBotsRouter.allowedMethods());
+  apiRouter.use(nomadDistributionRouter.routes()).use(nomadDistributionRouter.allowedMethods());
   app.use(apiRouter.routes()).use(apiRouter.allowedMethods());
 }

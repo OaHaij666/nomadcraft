@@ -146,7 +146,7 @@ test('unassigned key persists and syncs as unknown while other settings survive'
   assert(text.includes('key_key.forward:key.keyboard.unknown')); assert(text.includes('resourcePacks:["vanilla"]'))
 })
 
-test('Windows packaged updates ignore test overrides and reject local v99 pending/cache pollution', async t => {
+test('Windows packaged NC updates ignore test overrides, reject pending/cache pollution and do not query an unconfigured channel', async t => {
   const isolatedKeys = ['PORTABLE_EXECUTABLE_FILE', 'KAMUCL_UPDATE_TARGET_EXE', 'APPIMAGE'] as const
   const hostEnvironment = isolatedKeys.map(key => process.env[key])
   const unrelated = path.join(os.tmpdir(), 'kamucl-unrelated-host')
@@ -164,11 +164,11 @@ test('Windows packaged updates ignore test overrides and reject local v99 pendin
   assert.equal(api.getPendingUpdate(), null); assert(fs.existsSync(file)); assert(fs.readdirSync(root).some(f => f.startsWith('pending-update.json.rejected-')))
   fs.writeFileSync(path.join(root, 'update-check-cache.json'), JSON.stringify({ checkedAt: Date.now(), latest: release }))
   const checked = await api.checkLatest(false)
-  assert.equal(checked.hasUpdate, false); assert.equal(checked.release.version, '1.0.30'); assert(requested.every(u => u.startsWith('https://api.github.com/')))
+  assert.equal(checked.hasUpdate, false); assert.equal(checked.reason, 'update-channel-not-configured'); assert.deepEqual(requested, [], 'NC has no published update channel and must not query the original launcher repository')
   const official = { ...release, version: '1.0.42', assetName: 'KAMUCL-1.0.42.exe', assetUrl: 'https://github.com/kamubaba-i/KAMUCL/releases/download/v1.0.42/KAMUCL-1.0.42.exe' }
   const officialFile = path.join(root, official.assetName); fs.writeFileSync(officialFile, 'fixture')
   fs.writeFileSync(path.join(root, 'pending-update.json'), JSON.stringify({ release: official, file: officialFile }))
-  assert.equal(api.getPendingUpdate().release.version, '1.0.42')
+  assert.equal(api.getPendingUpdate(), null); assert(fs.existsSync(officialFile), 'untrusted upstream payload is preserved but never applied')
   assert.equal(api.trustedUpdateRelease({ ...official, assetUrl: official.assetUrl.replace('/v1.0.42/', '/v1.0.30/') }), false)
 })
 

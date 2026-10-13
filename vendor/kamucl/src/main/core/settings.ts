@@ -115,8 +115,8 @@ export function getSettings(): Settings {
         layout: { ...def.custom.layout, ...(raw.custom?.layout ?? {}) }
       },
       homeLayout: {
-        main: Array.isArray(raw.homeLayout?.main) ? raw.homeLayout.main : def.homeLayout.main,
-        side: Array.isArray(raw.homeLayout?.side) ? raw.homeLayout.side : def.homeLayout.side
+        main: Array.isArray(raw.homeLayout?.main) ? raw.homeLayout!.main : def.homeLayout.main,
+        side: Array.isArray(raw.homeLayout?.side) ? raw.homeLayout!.side : def.homeLayout.side
       },
       background: { ...def.background, ...(raw.background ?? {}) },
       launchThumbnail: { ...def.launchThumbnail, ...(raw.launchThumbnail ?? {}) },
@@ -223,8 +223,8 @@ export function saveSettings(patch: Partial<Settings>): Settings {
       layout: { ...cur.custom.layout, ...(patch.custom?.layout ?? {}) }
     },
     homeLayout: {
-      main: Array.isArray(patch.homeLayout?.main) ? patch.homeLayout.main : cur.homeLayout.main,
-      side: Array.isArray(patch.homeLayout?.side) ? patch.homeLayout.side : cur.homeLayout.side
+      main: Array.isArray(patch.homeLayout?.main) ? patch.homeLayout!.main : cur.homeLayout.main,
+      side: Array.isArray(patch.homeLayout?.side) ? patch.homeLayout!.side : cur.homeLayout.side
     },
     background: { ...cur.background, ...(patch.background ?? {}) },
     launchThumbnail: { ...cur.launchThumbnail, ...(patch.launchThumbnail ?? {}) },

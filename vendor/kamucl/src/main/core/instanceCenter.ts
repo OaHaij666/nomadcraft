@@ -48,7 +48,7 @@ export async function playerRoots(dir:string,id:string,saves=true,screenshots=fa
 export async function centerOverview(target:InstanceTarget):Promise<InstanceOverview>{
   const c=centerTarget(target),meta=withGameFolder(c.folder,()=>resolveInstanceMetadata(c.json,id=>{try{return readVersionJson(id)}catch{return undefined}}))
   let running=false;try{await assertInstanceIdle(c.dir)}catch{running=true}
-  return {target:c.target,directory:c.dir,shared:!c.state.isolated,name:target.id,mcVersion:meta.mcVersion,loader:meta.loader,running,roots:await playerRoots(c.dir,target.id,true,true)}
+  return {target:c.target,directory:c.dir,shared:!c.state.isolated,name:target.id,mcVersion:meta.mcVersion,loader:meta.loader,loaderVersion:meta.loaderVersion,running,roots:await playerRoots(c.dir,target.id,true,true)}
 }
 function selfContained(c:ReturnType<typeof centerTarget>,id:string):{json:VersionJson;jar:string}{
   return withGameFolder(c.folder,()=>{

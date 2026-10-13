@@ -1,3 +1,4 @@
+import { assertSyncSettled } from './cloudSyncFiles'
 /**
  * 游戏启动：版本链合并、classpath/natives 处理、JVM/游戏参数组装、进程管理
  */
@@ -395,6 +396,7 @@ async function launchOwned(
   // a0.1) 启动与管理页面共用同一个目录判定，避免配置路径、整合包和已存在
   // 独立内容在 UI 与最终 --gameDir 之间出现分歧；assets 仍使用全局共享目录。
   const effectiveGameDir = instanceDirectoryState(versionId, readVersionJson(versionId)).path
+  await assertSyncSettled(effectiveGameDir)
   let resourcePacksConfigured = false
   try { resourcePacksConfigured = /^\uFEFF?resourcePacks:/m.test(fs.readFileSync(path.join(effectiveGameDir, 'options.txt'), 'utf8')) } catch { /* a fresh instance */ }
   launchLog.debug(`实例 ${versionId} 游戏目录：${effectiveGameDir}`)

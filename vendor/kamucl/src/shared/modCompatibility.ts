@@ -164,7 +164,8 @@ export function dependencyRange(value: unknown, dialect: 'fabric' | 'quilt' = 'f
 export function modMatchesInstance(mod: Pick<ModInfo, 'loader' | 'mcRange' | 'loaderRange' | 'error' | 'variants'>, instance: InstalledVersion): boolean {
   const loader = normalizeLoader(instance.loader)
   if (mod.error || instance.failed || instance.incomplete || !loader) return false
-  const specs = (mod.variants?.length ? mod.variants : [mod]).filter(spec => loader === normalizeLoader(spec.loader))
+  const descriptors: Array<Pick<ModInfo, 'loader' | 'mcRange' | 'loaderRange'>> = mod.variants?.length ? mod.variants : [mod]
+  const specs = descriptors.filter(spec => loader === normalizeLoader(spec.loader))
   return specs.length > 0 && specs.every(spec =>
     matchesVersionRange(spec.mcRange, instance.mcVersion) &&
     (!spec.loaderRange || matchesVersionRange(spec.loaderRange, normalizeLoaderVersion(instance.loaderVersion ?? '', loader, instance.mcVersion))))
@@ -178,7 +179,8 @@ export function modMismatchReasons(mod: ModInfo, instance: InstalledVersion): st
   if (mod.error) return [mod.error]
   if (instance.failed || instance.incomplete) return ['实例安装不完整或元数据无法读取']
   const loader = normalizeLoader(instance.loader)
-  const specs = (mod.variants?.length ? mod.variants : [mod]).filter(s => loader && loader === normalizeLoader(s.loader))
+  const descriptors: Array<Pick<ModInfo, 'loader' | 'mcRange' | 'loaderRange'>> = mod.variants?.length ? mod.variants : [mod]
+  const specs = descriptors.filter(s => loader && loader === normalizeLoader(s.loader))
   if (!specs.length) return [`需要 ${mod.loader ?? '已声明的加载器'}，实例为 ${loader ?? '纯净版/未知'}`]
   const reasons = specs.flatMap(s => [
     ...(!matchesVersionRange(s.mcRange, instance.mcVersion) ? [`Minecraft ${instance.mcVersion} 不满足 ${s.mcRange}（方括号含边界，圆括号不含边界）`] : []),

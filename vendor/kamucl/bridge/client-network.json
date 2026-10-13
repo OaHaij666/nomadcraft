@@ -1,0 +1,9 @@
+{
+  "forge1201": {
+    "id": "clientresetpacket",
+    "file": "ForgeClientResetPacket-0.3.1.jar",
+    "url": "https://cdn.modrinth.com/data/y2PnCYl0/versions/aG3k2b3I/ForgeClientResetPacket-0.3.1.jar",
+    "sha256": "591c3b6ce910c0f4bdfe7eb985537f3cfdd6b84c84bb3af67345c91980f52cf4",
+    "sha512": "22b3a994f237f6bc79dc22e5d20bd3314470accfb91ebbf93fd4541d00622dfed6901997bba5fc4a64efdcdf0e8efb8d224b27e2e1fada477da19bef5b532899"
+  }
+}

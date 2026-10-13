@@ -106,7 +106,7 @@ test('Fabric selection waits for API metadata, retries failures, and ignores sta
     installVersion: async (...args: any[]) => { installs.push(args) },
     errText: (e: Error) => e.message
   }
-  const store = { store: vue.reactive({ installed: [], installing: new Set(), searchKeyword: '' }), toast: () => {} }
+  const store = { store: vue.reactive({ installed: [], cloudInstances: [], cloudLocalClients: [], cloudServiceId: '', installing: new Set(), searchKeyword: '' }), toast: () => {} }
   const require = createRequire(path.resolve('package.json'))
   const exported = { exports: {} as any }
   new Function('require', 'module', 'exports', 'localStorage', result.outputFiles[0].text)(

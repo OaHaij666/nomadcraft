@@ -65,8 +65,10 @@ async function copyLogs(): Promise<void> {
 
 let offEvent: (() => void) | undefined
 
-function onEvent(payload: { type: string; data: unknown }): void {
-  if (payload.type === 'status') { status.value = { toolVersion:status.value?.toolVersion, binaryPath:status.value?.binaryPath, binaryReady: status.value?.binaryReady ?? false, running: status.value?.running ?? false, ...(payload.data as TcStatus) }; return }
+function onEvent(value: unknown): void {
+  if (!value || typeof value !== 'object' || !('type' in value)) return
+  const payload = value as {type: string; data: unknown}
+  if (payload.type === 'status') { status.value = { toolVersion:status.value?.toolVersion, binaryPath:status.value?.binaryPath, binaryReady: status.value?.binaryReady ?? false, running: status.value?.running ?? false, ...(payload.data as Partial<TcStatus>), phase: (payload.data as Partial<TcStatus>)?.phase ?? status.value?.phase ?? 'idle' }; return }
   if (payload.type === 'log') {
     const d = payload.data as { level: string; msg: string }
     if (d?.msg) pushLog(`[${d.level}] ${d.msg}`)
@@ -80,7 +82,7 @@ function onEvent(payload: { type: string; data: unknown }): void {
 }
 
 async function refresh(): Promise<void> {
-  try { status.value = await window.kamucl.invoke('tc:status'); if(status.value?.error)error.value=status.value.error; const role=terracottaRole(status.value); if(role!=='none')mode.value=role==='host'?'host':'join' } catch { /* 窗口关闭 */ }
+  try { status.value = await window.kamucl.invoke<TcStatus>('tc:status'); if(status.value?.error)error.value=status.value.error; const role=terracottaRole(status.value); if(role!=='none')mode.value=role==='host'?'host':'join' } catch { /* 窗口关闭 */ }
 }
 
 async function install(): Promise<void> {

@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import CloudOperations from '../components/CloudOperations.vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { nomadStatus, nomadWebToken, selectDir, getSettings } from '../api'
 import { openNomadCenter, store } from '../store'
 
+const operations=ref(false)
+const panelFrame=ref<HTMLIFrameElement>()
+function onMessage(event:MessageEvent){if(event.source!==panelFrame.value?.contentWindow||!['kamucl-panel://local','null'].includes(event.origin))return;if(event.data?.type==='nomad-open-operations')operations.value=true}
 const storageReady = ref(false)
 const storagePath = ref('')
 const storageError = ref('')
@@ -46,7 +50,8 @@ async function chooseStorage() {
 }
 function onFrameLoad() { loading.value = false }
 function goLogin() { openNomadCenter() }
-onMounted(() => { void load() })
+onMounted(() => { window.addEventListener('message',onMessage);void load() })
+onUnmounted(()=>window.removeEventListener('message',onMessage))
 </script>
 
 <template>
@@ -55,7 +60,8 @@ onMounted(() => { void load() })
     <div v-else-if="!loading&&!storageReady" class="cloud-storage-setup">
       <article><span class="setup-mark">NC</span><h1>设置云端实例的本地存放位置</h1><p>云端实例也需要本地空间保存游戏文件。先选择这台电脑上的存放文件夹，再进入实例中心。</p><label>本地目录<div>{{storagePath||'尚未选择文件夹'}}</div></label><small>此设置只保存在本机；各个云端实例仍可绑定具体的本地客户端。</small><p v-if="storageError" class="storage-error" role="alert">{{storageError}}</p><button class="btn btn-primary" :disabled="choosing" @click="chooseStorage">{{choosing?'正在选择…':'选择文件夹并进入实例中心'}}</button></article>
     </div>
-    <div v-else class="cloud-panel-frame-wrap"><div v-if="loading" class="cloud-panel-loading">正在加载{{ iframeTitle }}…</div><iframe v-if="panelUrl&&storageReady" class="cloud-panel-frame" :src="panelUrl" :title="`NomadCraft ${iframeTitle}`" @load="onFrameLoad" /></div>
+    <CloudOperations v-else-if="operations&&storageReady" @close="operations=false" />
+    <div v-else class="cloud-panel-frame-wrap"><div v-if="loading" class="cloud-panel-loading">正在加载{{ iframeTitle }}…</div><iframe ref="panelFrame" v-if="panelUrl&&storageReady" class="cloud-panel-frame" :src="panelUrl" :title="`NomadCraft ${iframeTitle}`" @load="onFrameLoad" /></div>
   </section>
 </template>
 

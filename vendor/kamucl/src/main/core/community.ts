@@ -46,7 +46,7 @@ export const withCommunitySignal=<T>(signal:AbortSignal|undefined,run:()=>Promis
 
 async function fetchJson(url: string, headers: Record<string, string> = {}): Promise<unknown> {
   const signal=requestSignal.getStore();signal?.throwIfAborted()
-  const res = await fetch(url, { signal: signal?AbortSignal.any([signal,AbortSignal.timeout(TIMEOUT)]):AbortSignal.timeout(TIMEOUT), headers: { ...UA, ...headers } })
+  const res = await fetch(url, { signal: signal?(AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal,AbortSignal.timeout(TIMEOUT)]):AbortSignal.timeout(TIMEOUT), headers: { ...UA, ...headers } })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   return res.json()
 }

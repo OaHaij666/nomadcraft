@@ -536,6 +536,11 @@ export async function installVersion(
   return withGameFolder(gameDir(), () => installVersionInFolder(versionId, opts, emit, signal, isolated, onFavoriteResult))
 }
 
+/** Install a cloud client in a fixed folder without changing the user's isolation defaults. */
+export function installCloudVersion(folder: string, versionId: string, opts: InstallOptions, emit: ProgressEmit, signal?: AbortSignal): Promise<string> {
+  return withGameFolder(folder, () => installVersionInFolder(versionId, opts, emit, signal, true))
+}
+
 export function launchLibraryFiles(vj: VersionJson) {
   return collectLibraries(vj).map(e => ({ dest: e.path, url: e.url, sha1: e.sha1, size: e.size, nativeChecksumUrl: e.nativeChecksumUrl }))
 }

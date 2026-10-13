@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "test": "tsx --test tests/all.test.ts",
+    "test": "node --require ./tests/helpers/electron-app.cjs --import tsx --test --test-timeout=120000 tests/all.test.ts",
     "start": "electron-vite preview",
     "dist": "npm run dist:win",
     "dist:win": "npm run build && electron-builder --win portable --x64 --publish never && node scripts/pack-windows-zip.cjs",
@@ -50,7 +50,11 @@
       "out/main/LinuxGameWindow",
       "out/main/kamucl-bridge.jar",
       "out/main/kamucl-offline-skin.jar",
-      "out/main/ysm-runtime/**"
+      "out/main/ysm-runtime/**",
+      "out/main/nomad-agent*",
+      "out/main/nomad-numen-adapter*.jar",
+      "out/main/kamucl-bridge-*.jar",
+      "out/main/ForgeClientResetPacket-0.3.1.jar"
     ],
     "beforePack": "scripts/portable-build-hook.cjs",
     "afterPack": "scripts/verify-windows-runtime.cjs",

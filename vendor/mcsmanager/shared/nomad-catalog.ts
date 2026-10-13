@@ -10,7 +10,12 @@ export const CATALOG_PERMISSIONS = [
   "room.manage",
   "members.manage",
   "mods.manage",
-  "players.manage"
+  "players.manage",
+  "bots.private.create",
+  "bots.shared.create",
+  "bots.manage",
+  "bots.approve",
+  "models.approve"
 ] as const;
 export type CatalogPermission = (typeof CATALOG_PERMISSIONS)[number];
 export const SERVER_LOADERS = ["vanilla", "paper", "fabric", "forge", "neoforge"] as const;
@@ -100,6 +105,9 @@ export interface CatalogRoom {
   createdAt: number;
 }
 export interface PublishedRelease {
+  manifest?: import('./nomad-distribution').DistributionManifest;
+  manifestDigest?: string;
+  lineage?: {serviceId:string;instanceId:string;releaseId:string;digest:string};
   id: string;
   format: "modrinth" | "curseforge" | "pcl";
   install?: InstallSelection;
@@ -115,6 +123,7 @@ export interface PublishedRelease {
   fileCount: number;
 }
 export interface CatalogSave {
+  gateway?: {enabled:boolean;backendPort:number};
   placement?:PlacementPolicy;
   ingress?:NetworkIngress;
   hosting?: HostingView | null;

@@ -15,3 +15,16 @@ describe("paired compute placement",()=>{
  it("cannot exceed task reservations or change a running network",async()=>{const server=await node();await catalog.runtimeSettings(admin,id,saveId,{placement:{mode:"fixed",nodeId:server.node.id},ingress:{kind:"generic-tcp",bindHost:"127.0.0.1",bindPort:25565,publicHost:"edge.example.com",publicPort:30065,family:"auto"}});await open();const results=await Promise.all([poll(server.node.id),poll(server.node.id)]);expect(results.filter(r=>r.assignment)).toHaveLength(1);await expect(catalog.runtimeSettings(admin,id,saveId,{placement:{mode:"manual",nodeId:null}})).rejects.toMatchObject({code:"close_rooms_first"});const view=(await catalog.list(owner)).instances[0].saves[0];expect(view.ingress?.publicPort).toBe(30065);expect(view.ingress?.bindPort).toBe(25565);});
  it("keeps network and reserved ports administrator-only",async()=>{const profile={kind:"direct",bindHost:"::1",bindPort:25565,publicHost:"::1",publicPort:25565,family:"ipv6"};await expect(catalog.runtimeSettings(owner,id,saveId,{ingress:profile})).rejects.toMatchObject({code:"forbidden"});await catalog.runtimeSettings(admin,id,saveId,{ingress:profile});const another=(await catalog.save(owner,id,null,{name:"Other",description:"",rules:DEFAULT_RULES})).id;await expect(catalog.runtimeSettings(admin,id,another,{ingress:profile})).rejects.toMatchObject({code:"network_port_reserved"});});
 });
+
+it("persists gateway settings, reserves both ports, and restricts them to administrators",async()=>{
+ data.instances[0].profile.loader="fabric";data.instances[0].releases[0].profile.loader="fabric";data.instances[0].releases[0].server.type="fabric";
+ const ingress={kind:"direct",bindHost:"0.0.0.0",bindPort:25565,publicHost:"edge.example.com",publicPort:30065,family:"auto"},gateway={enabled:true,backendPort:25566};
+ await expect(catalog.runtimeSettings(owner,id,saveId,{ingress,gateway})).rejects.toMatchObject({code:"forbidden"});
+ await expect(catalog.runtimeSettings(admin,id,saveId,{ingress,gateway:{enabled:true,backendPort:25565}})).rejects.toMatchObject({code:"gateway_port_conflict"});
+ await catalog.runtimeSettings(admin,id,saveId,{ingress,gateway});
+ const view=(await catalog.list(admin)).instances[0].saves[0];expect(view.gateway).toEqual(gateway);
+ const another=(await catalog.save(owner,id,null,{name:"Other",description:"",rules:DEFAULT_RULES})).id;
+ await expect(catalog.runtimeSettings(admin,id,another,{ingress:{...ingress,bindPort:25566}})).rejects.toMatchObject({code:"network_port_reserved"});
+ await expect(catalog.runtimeSettings(admin,id,saveId,{ingress:null})).rejects.toMatchObject({code:"gateway_ingress_required"});
+ await catalog.runtimeSettings(admin,id,saveId,{ingress:null,gateway:{enabled:false,backendPort:25566}});expect((await catalog.list(admin)).instances[0].saves[0].gateway?.enabled).toBe(false);
+});

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "nomad_numen_adapter",
+  "version": "0.1.0",
+  "name": "NomadCraft Numen Adapter",
+  "environment": "*",
+  "mixins": [
+    "nomad-numen.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "java": ">=21",
+    "numen_api": "0.1.4.1"
+  }
+}

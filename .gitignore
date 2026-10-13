@@ -26,3 +26,21 @@ vendor/**/lib/*.exe
 vendor/kamucl/ysm-engine/**/bin/
 vendor/kamucl/ysm-engine/**/obj/
 vendor/kamucl/ysm-runtime/viewer/
+
+# Prevent known accidental root artifacts
+/*.png
+/*.jpg
+/*.jpeg
+/%PROGRAMDATA%/
+/NVIDIA Corporation/
+
+# Project documentation stays local
+/docs/
+
+/apps/numen-adapter/build/
+/apps/numen-adapter/dist/
+/apps/numen-adapter/.cache/
+
+/apps/gateway/build/
+/apps/gateway/dist/
+/apps/gateway/.cache/

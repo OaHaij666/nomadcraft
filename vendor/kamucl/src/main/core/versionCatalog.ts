@@ -57,7 +57,7 @@ export async function fetchVersionCatalog(cacheFile: string, refresh = false, si
   if (!refresh && schema === 2 && cached && now >= cached.checkedAt && now - cached.checkedAt < TTL) return cached
   const results = await Promise.allSettled(VERSION_SOURCES.map(async url => {
     const timeout = AbortSignal.timeout(8000)
-    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+    const requestSignal = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
     const response = await fetcher(url, { signal: requestSignal, headers: { 'Cache-Control': 'no-cache' } })
     if (!response.ok) { await response.body?.cancel(); throw new Error(`清单 HTTP ${response.status}`) }
     return parseVersionCatalog(await response.json())

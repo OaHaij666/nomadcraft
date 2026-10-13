@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export interface NomadStatus {
+  serviceId?: string
   address: string
   connected: boolean
   signedIn: boolean
@@ -15,6 +16,9 @@ let address = ''
 let token: string | null = null
 let cookie = ''
 let username: string | undefined
+let serviceId: string | undefined
+let localStatusEnricher:(instances:any[],serviceId:string)=>Promise<void>=async()=>{}
+export function registerCloudCatalogStatus(enricher:typeof localStatusEnricher){localStatusEnricher=enricher}
 function configFile(): string { return path.join(app.getPath('userData'), 'nomadcraft.json') }
 function loadConfig(): void {
   if (address) return
@@ -38,14 +42,14 @@ function endpoint(route: string): string {
   return base + '/' + suffix
 }
 function requireAddress(): string { loadConfig(); if (!address) throw new Error('请先填写 NomadCraft 服务地址'); return address }
-async function request(route: string, init: RequestInit = {}): Promise<unknown> {
+export async function request(route: string, init: RequestInit = {}): Promise<unknown> {
   requireAddress()
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
   headers.set('X-Requested-With', 'XMLHttpRequest')
   if (token) headers.set('Authorization', 'Bearer ' + token)
   if (cookie) headers.set('Cookie', cookie)
-  const response = await fetch(endpoint(route) + (token ? (route.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) : ''), { ...init, headers, signal: AbortSignal.timeout(20000) })
+  const response = await fetch(endpoint(route), { ...init, headers, signal: AbortSignal.timeout(20000) })
   const getCookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie
   const receivedCookies = getCookies ? getCookies.call(response.headers) : []
   if (receivedCookies.length) cookie = receivedCookies.map(value => value.split(';', 1)[0]).join('; ')
@@ -55,19 +59,19 @@ async function request(route: string, init: RequestInit = {}): Promise<unknown> 
   if (!response.ok || (body && typeof body.status === 'number' && body.status !== 200)) throw new Error(String(body?.data?.message ?? body?.data ?? 'NomadCraft 请求失败（' + response.status + '）'))
   return body?.data ?? body
 }
-export function status(): NomadStatus { loadConfig(); return { address, connected: !!address, signedIn: !!token, ...(username ? { username } : {}) } }
+export function status(): NomadStatus { loadConfig(); return { address, connected: !!address, serviceId, signedIn: !!token, ...(username ? { username } : {}) } }
 export function webToken(): { address: string; token: string | null } {
   loadConfig()
   return { address, token }
 }
 
-export function connect(input: string): NomadStatus { address = normalizeAddress(input); token = null; cookie = ''; username = undefined; saveConfig(); return status() }
+export function connect(input: string): NomadStatus { address = normalizeAddress(input); token = null; cookie = ''; username = undefined; serviceId=undefined; saveConfig(); return status() }
 export async function login(input: string, user: string, password: string, code = ''): Promise<NomadStatus> {
   connect(input)
   const data = await request('api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: String(user), password: String(password), code: String(code) }) })
   if (data === 'NEED_2FA') throw new Error('此账号需要二步验证码')
   if (typeof data !== 'string' || data.length < 16 || data.length > 256) throw new Error('NomadCraft 登录未返回有效会话')
-  token = data; username = String(user); return status()
+  token = data; username = String(user);try{serviceId=(await request('api/nomad/distribution/identity') as {serviceId:string}).serviceId}catch{serviceId=undefined} return status()
 }
 export async function logout(): Promise<NomadStatus> {
   try {
@@ -83,7 +87,9 @@ export async function logout(): Promise<NomadStatus> {
 export async function catalog(): Promise<NomadCatalog> {
   if (!token) throw new Error('请先登录 NomadCraft')
   const data = await request('api/nomad/catalog/') as any
-  return { instances: Array.isArray(data?.instances) ? data.instances : [], fetchedAt: Date.now() }
+  const instances=Array.isArray(data?.instances)?data.instances:[]
+  if(serviceId)await localStatusEnricher(instances,serviceId)
+  return { ...data, instances, fetchedAt: Date.now() }
 }
 export interface NomadOfficialInput { version: string; name: string; profile?: unknown; server?: unknown }
 export interface NomadSaveInput { name: string; description?: string; rules?: unknown }
@@ -111,4 +117,10 @@ export function setStorage(directory:string):{path:string;valid:boolean}{
   if(typeof directory!=='string'||!path.isAbsolute(directory)||!fs.statSync(directory).isDirectory())throw new Error('请选择存在的本地文件夹')
   fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK)
   const resolved=fs.realpathSync(directory);saveSettings({cloudInstanceRoot:resolved});return storage()
+}
+
+/** Freeze the accepted service/session across asynchronous transfers. */
+export function cloudClient(){requireAddress();if(!token||!serviceId)throw new Error('请登录支持云端分发的 NomadCraft 服务');const origin=address,credential=token,cookies=cookie,identity=serviceId;
+ const raw=async(route:string,init:RequestInit & {timeoutMs?:number}={})=>{const {timeoutMs,...requestInit}=init;const headers=new Headers(init.headers);headers.set('Authorization','Bearer '+credential);headers.set('X-Requested-With','XMLHttpRequest');if(cookies)headers.set('Cookie',cookies);const response=await fetch(origin+'/'+route.replace(/^\//,''),{...requestInit,headers,redirect:'error',signal:(AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([init.signal??new AbortController().signal,AbortSignal.timeout(Math.max(1000,Math.min(timeoutMs??60000,300000)))])});if(!response.ok){const text=(await response.text()).slice(0,500);throw new Error('云端请求失败 '+response.status+'：'+text)}return response};
+ const json=async(route:string,init:RequestInit & {timeoutMs?:number}={})=>{const response=await raw(route,{...init,headers:{'Content-Type':'application/json',...init.headers}});const body=await response.json();if(body.status&&body.status!==200)throw new Error(String(body.data));return body.data??body};return{origin,serviceId:identity,raw,json};
 }

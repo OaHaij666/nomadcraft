@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import type { VersionJson } from './versions'
@@ -59,6 +60,8 @@ export function readClientVersionEvidence(file: string): string | undefined {
       const localNameSize = local.readUInt16LE(26)
       if (read(offset + 30, localNameSize).toString('utf8') !== name) break
       const body = read(offset + 30 + localNameSize + local.readUInt16LE(28), compressed)
+      const entryIdentity = identity + ':' + central.readUInt32LE(16) + ':' + crypto.createHash('sha256').update(body).digest('hex')
+      if (previous?.identity === entryIdentity) return previous.version
       const data = method === 8 ? inflateRawSync(body, { maxOutputLength: MAX_METADATA }) : body
       if (data.length !== expanded || crc32(data) !== central.readUInt32LE(16)) break
       const id = JSON.parse(data.toString('utf8').replace(/^\uFEFF/, '')).id

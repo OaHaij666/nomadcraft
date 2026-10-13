@@ -76,7 +76,7 @@ export class ModSyncService {
       const code = String(payload.code).trim().toUpperCase()
       if (!validateRoomCode(code)) throw new Error('请输入有效的六位房间码')
       if(this.bypassed.has(code))return this.skipped(code,'BYPASSED')
-      const controller = this.begin(payload.operation), signal = AbortSignal.any([controller.signal, AbortSignal.timeout(12000)])
+      const controller = this.begin(payload.operation), signal = (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([controller.signal, AbortSignal.timeout(12000)])
       try {
         const context = await targetContext(payload.target)
         const scope = payload.scope === 'all' ? 'all' : 'required'

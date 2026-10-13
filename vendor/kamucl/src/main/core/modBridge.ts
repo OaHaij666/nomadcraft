@@ -9,20 +9,26 @@ import { instanceDirectoryState } from './instances'
 import { readVersionJson } from './versions'
 import { parseModFile } from './modinfo'
 import { join } from 'node:path'
+import { resolveInstanceMetadata } from './instanceMetadata'
+import { playerBridgeArtifact, isPlayerBridgeMod } from '../../shared/bridgeTargets'
 
 /** 内置桥接 MOD jar（构建时复制进 out/main，打包时 asarUnpack） */
-function bundledBridgeJar(): string {
-  return join(__dirname, 'kamucl-bridge.jar').replace('app.asar', 'app.asar.unpacked')
+function bridgeTarget(versionId: string) {
+  return resolveInstanceMetadata(readVersionJson(versionId), id => { try { return readVersionJson(id) } catch { return undefined } })
+}
+function bundledBridgeJar(versionId: string): string {
+  return join(__dirname, playerBridgeArtifact(bridgeTarget(versionId))).replace('app.asar', 'app.asar.unpacked')
 }
 
-/** 桥接 MOD 是否已安装到该实例的 mods 目录（按 fabric mod id 识别） */
+/** Identify both loader IDs without treating a wrong-loader bridge as installed. */
 export function bridgeInstalled(versionId: string): boolean {
   const modsDir = path.join(gameDirOf(versionId), 'mods')
   try {
+    const target=bridgeTarget(versionId);playerBridgeArtifact(target)
     for (const name of fs.readdirSync(modsDir)) {
       if (!name.toLowerCase().endsWith('.jar')) continue
       const info = parseModFile(path.join(modsDir, name))
-      if (info.id === 'kamucl-bridge') return true
+      if (isPlayerBridgeMod(info.id) && info.loader === target.loader) return true
     }
   } catch { /* mods 目录不存在视为未安装 */ }
   return false
@@ -31,12 +37,20 @@ export function bridgeInstalled(versionId: string): boolean {
 /** 把内置桥接 MOD 安装到实例 mods 目录（幂等：已安装则跳过） */
 export function installBridge(versionId: string): { ok: boolean; already?: boolean; error?: string } {
   try {
-    if (bridgeInstalled(versionId)) return { ok: true, already: true }
-    const src = bundledBridgeJar()
+    const target=bridgeTarget(versionId),src=bundledBridgeJar(versionId)
+    const existingDir=path.join(gameDirOf(versionId),'mods')
+    if(fs.existsSync(existingDir)) for(const name of fs.readdirSync(existingDir)){
+      if(!name.toLowerCase().endsWith('.jar'))continue
+      const info=parseModFile(path.join(existingDir,name));if(!isPlayerBridgeMod(info.id))continue
+      if(info.loader!==target.loader)return {ok:false,error:'已有其他加载器的桥接 MOD，请先在模组管理器处理：'+name}
+      return {ok:true,already:true}
+    }
     if (!fs.existsSync(src)) return { ok: false, error: '内置桥接 MOD 文件缺失，请重新安装启动器' }
     const modsDir = path.join(gameDirOf(versionId), 'mods')
     fs.mkdirSync(modsDir, { recursive: true })
-    fs.copyFileSync(src, path.join(modsDir, 'kamucl-bridge-1.0.1.jar'))
+    const destination=path.join(modsDir,target.loader==='fabric'?'kamucl-bridge-1.0.1.jar':path.basename(src))
+    if(fs.existsSync(destination))return {ok:false,error:'已有同名文件，已保留，请先在模组管理器处理：'+path.basename(destination)}
+    fs.copyFileSync(src,destination,fs.constants.COPYFILE_EXCL)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }

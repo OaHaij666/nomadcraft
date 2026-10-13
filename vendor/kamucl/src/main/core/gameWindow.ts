@@ -34,7 +34,8 @@ export function normalizeStoredResolution(
   }
 ): GameResolution {
   const legacyFullscreen = value?.fullscreen === true
-  const mode = isMode(value?.mode) ? value.mode : legacyFullscreen ? 'fullscreen' : fallback.mode
+  const storedMode = value?.mode
+  const mode = isMode(storedMode) ? storedMode : legacyFullscreen ? 'fullscreen' : fallback.mode
   const width = Number.isFinite(value?.width) ? Math.round(value!.width!) : fallback.width
   const height = Number.isFinite(value?.height) ? Math.round(value!.height!) : fallback.height
   return { width, height, mode, fullscreen: mode === 'fullscreen' }

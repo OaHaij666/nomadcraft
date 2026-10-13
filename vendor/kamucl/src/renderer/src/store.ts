@@ -105,16 +105,18 @@ export const store = reactive({
   installed: [] as InstalledVersion[],
   cloudInstances: [] as CloudInstalledVersion[],
   cloudLocalClients: [] as InstalledVersion[],
+  gameInstanceTab: null as 'cloud' | 'installed' | 'download' | null,
   cloudLoading: false,
   cloudError: '',
   cloudAddress: '',
+  cloudServiceId: '',
   cloudSignedIn: false,
   resourceInstanceSource: 'local' as 'local' | 'cloud',
   nomadEntryRequested: false,
   /** 从云端侧边栏跳转到多人游戏登录后，登录成功返回云端中心。 */
   nomadReturnToCloud: false,
   currentView: 'home' as ViewName,
-  settingsSection: '' as '' | 'java' | 'memory' | 'downloads',
+  settingsSection: '' as '' | 'java' | 'memory' | 'downloads' | 'installation',
   /** 顶栏搜索关键字（游戏版本页版本列表联动过滤） */
   searchKeyword: '',
   /** 资源管理（模组/资源包/光影包）当前选中的版本 id；空 = 跟随第一个已装版本 */
@@ -174,14 +176,16 @@ export function resolveLauncherTarget(value: LauncherInstance | undefined): Inst
   if (!store.settings?.cloudInstanceRoot || !value.cloudLocalVersionId || !value.cloudLocalFolder) return undefined
   return store.cloudLocalClients.find(local => local.id === value.cloudLocalVersionId && normalizeFolder(local.folder) === normalizeFolder(value.cloudLocalFolder) && !local.failed && !local.incomplete)
 }
+function bindingIdentity(key:string):string {try{return JSON.parse(key)[1]}catch{return key.slice(0,key.lastIndexOf(':'))}}
 export function canManageInstanceMods(target: InstalledVersion | undefined): boolean {
   if (!target) return false
   const bindings=Object.entries(store.settings?.cloudInstanceBindings ?? {}).filter(([,binding]) => {
     const local=store.cloudLocalClients.find(v=>v.id===binding.localVersionId && normalizeFolder(v.folder)===normalizeFolder(binding.localFolder))
     return binding.localVersionId===target.id && normalizeFolder(binding.localFolder)===normalizeFolder(target.folder) || !!local?.gameDirectory && !!target.gameDirectory && normalizeFolder(local.gameDirectory)===normalizeFolder(target.gameDirectory)
   })
-  return bindings.every(([key]) => {
-    const id=key.slice(0,key.lastIndexOf(':'))
+  return bindings.every(([key,binding]) => {
+    if(binding.serviceId&&binding.serviceId!==store.cloudServiceId)return false
+    const id=bindingIdentity(key)
     return !!store.settings?.cloudInstanceRoot && store.cloudInstances.some(cloud=>cloud.cloudInstanceId===id && cloudCan(cloud,'mods.manage'))
   })
 }
@@ -194,8 +198,13 @@ export async function selectInstance(id: string, folder?: string) {
   store.resourceInstanceSource = 'local'
   store.resourceVersionId = id
 }
-export async function selectCloudInstance(id: string) {
-  if (!store.cloudInstances.some(v => v.id === id)) return
+export async function selectCloudInstance(id: string, prepared = false) {
+  const version = store.cloudInstances.find(v => v.id === id)
+  if (!version) return
+  if (!prepared) {
+    const { prepareCloud } = await import('./cloudPreparation')
+    if (!await prepareCloud({instanceId: version.cloudInstanceId, saveId: version.cloudSaveId})) return
+  }
   try {
     const storage = await window.kamucl.invoke('nomad:storage') as {valid:boolean}
     if (!storage.valid) { toast('请先设置有效的云端实例本地存放目录', 'info'); openCloudCenter(); return }
@@ -394,7 +403,7 @@ export async function refreshAccounts() {
 }
 
 export function cloudBindingKey(instanceId: string, saveId?: string): string {
-  return `${instanceId}:${saveId || 'instance'}`
+  return JSON.stringify([store.cloudServiceId || store.cloudAddress,instanceId,saveId || 'instance'])
 }
 
 const CLOUD_SYNC_LABELS: Record<CloudSyncState, string> = {
@@ -416,14 +425,7 @@ function cloudSyncProjection(instance: NomadCatalogInstance, saveId: string | un
   if (!binding?.localFolder) return { state: 'unbound', message: '请选择一个本地客户端实例作为资源目录。' }
   const serverState = normalizeCloudSyncState(remote?.state)
   if (serverState) return { state: serverState, message: remote?.message }
-  const cloudRevision = remote?.cloudRevision ?? instance.revision
-  const localRevision = remote?.localRevision ?? binding.lastSyncedRevision
-  if (cloudRevision != null && localRevision != null) {
-    if (cloudRevision === localRevision) return { state: 'synced', lastSyncedRevision: binding.lastSyncedRevision }
-    if (cloudRevision > localRevision) return { state: 'cloud-ahead', message: '控制面修订号更新，本地客户端等待同步。', lastSyncedRevision: binding.lastSyncedRevision }
-    return { state: 'local-ahead', message: '本地记录高于当前控制面修订号，等待检查。', lastSyncedRevision: binding.lastSyncedRevision }
-  }
-  return { state: 'checking', message: '已绑定本地目录，等待控制面返回同步元数据。', lastSyncedRevision: binding.lastSyncedRevision }
+  return { state: 'checking', message: '等待本地受管文件校验。', lastSyncedRevision: binding.lastSyncedRevision }
 }
 function cloudProjection(instance: NomadCatalogInstance): CloudInstalledVersion[] {
   const profile = instance.profile ?? {}
@@ -463,7 +465,7 @@ export async function setCloudInstanceBinding(cloudInstanceId: string, saveId: s
   if (binding && !(await window.kamucl.invoke('nomad:storage') as {valid:boolean}).valid) { toast('请先设置云端实例本地存放目录', 'info'); openCloudCenter(); return }
   const next = { ...(store.settings?.cloudInstanceBindings ?? {}) }
   const key = cloudBindingKey(cloudInstanceId, saveId)
-  if (binding?.localFolder) next[key] = { ...binding, localFolder: binding.localFolder, lastCheckedAt: Date.now() }
+  if (binding?.localFolder) next[key] = { ...binding, serviceId:store.cloudServiceId,instanceId:cloudInstanceId,saveId,localFolder: binding.localFolder, lastCheckedAt: Date.now() }
   else delete next[key]
   store.settings = await saveSettings({ cloudInstanceBindings: next })
   await refreshCloudInstances()
@@ -474,6 +476,7 @@ export async function refreshCloudInstances() {
   try {
     const status = await nomadStatus()
     store.cloudAddress = status.address
+    store.cloudServiceId = status.serviceId ?? ''
     store.cloudSignedIn = status.signedIn
     if (!status.signedIn) { store.cloudInstances = []; return }
     const catalog = await nomadCatalog()

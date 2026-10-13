@@ -111,6 +111,13 @@ export interface FolderScanResult {
 export type CloudSyncState = 'unbound' | 'checking' | 'synced' | 'cloud-ahead' | 'local-ahead' | 'conflict' | 'offline'
 
 export interface CloudInstanceBinding {
+  serviceId?:string
+  instanceId?:string
+  saveId?:string
+  baseReleaseId?:string
+  baseManifestDigest?:string
+  verifiedAt?:number
+  manifest?:import('../../../mcsmanager/shared/nomad-distribution').DistributionManifest
   /** 本地客户端使用的已登记游戏文件夹。 */
   localFolder: string
   /** 本地客户端实例 ID；与 localFolder 组合后才是唯一目标。 */
@@ -691,6 +698,8 @@ export interface ManualModpackFile {
 }
 export interface ManualModpackRequest { token: string; files: ManualModpackFile[] }
 export interface ProgressEvent {
+  /** Identifies a cloud preparation workflow across installation and synchronization. */
+  cloudPrepareKey?: string
   /** Optional renderer-generated correlation ID; separates simultaneous MOD dialogs. */
   operationId?: string
   manualFiles?: ManualModpackRequest | null
@@ -1041,7 +1050,7 @@ export interface CommunityResult {
 }
 
 /** An identity can open download/metadata without inventing absent search metrics. */
-export type CommunityProjectReference = Pick<CommunityResult, 'source' | 'projectId' | 'title'> & Partial<Pick<CommunityResult, 'slug' | 'originalTitle'>>
+export type CommunityProjectReference = Pick<CommunityResult, 'source' | 'projectId' | 'title'> & Partial<Pick<CommunityResult, 'slug' | 'originalTitle' | 'iconUrl'>>
 export interface CommunityModProject extends CommunityProjectReference {
   kind: 'mod'
   iconUrl?: string

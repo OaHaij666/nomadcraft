@@ -141,3 +141,9 @@ The bundled YSMParser WASM runtime and glue originate from OpenYSM/YSMParser (MI
 
 
 YSMViewer: DrAbcOfficial/YSMViewer, revision a30baf27425a9cc206af095600e3d98e4eb7f472, GPL-3.0. Browser renderer, bundled Three.js/OrbitControls and C# Core/payload builder; sources and modifications in licenses/ysmviewer and ysm-engine. See licenses/ysmviewer/PATCHES.md.
+
+
+## Forward Forge Client Reset Packet — MIT
+
+Unmodified Forge 1.20.1 client component, release 0.3.1 by wolflord212312; source: https://github.com/wolflord212312/Forge-Client-Reset-Packet .
+Official Modrinth artifact aG3k2b3I; fixed checksums and source URL are recorded in bridge/client-network.json. The component is bundled to support Forge cloud host handover, and is installed only into the client. It is not installed into a compute server. Full upstream license: licenses/forge-client-reset-packet.txt.

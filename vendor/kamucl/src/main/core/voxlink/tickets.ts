@@ -24,7 +24,7 @@ export class TicketService {
   private secret(row:StoredTicket){try{return this.codec.open(row.secret)}catch{throw new TicketError('SECRET_UNAVAILABLE','工单归属凭证无法解密，请使用最初提交工单的系统账号')}}
   private url(route:string,query?:Record<string,string>){const base=this.base();if(!validateServerURL(base))throw new TicketError('BAD_SERVER_URL','工单服务器地址无效');const url=new URL(base);url.searchParams.set('route',route);for(const[key,value]of Object.entries(query??{}))url.searchParams.set(key,value);return url}
   private async send(route:string,init:RequestInit,signal:AbortSignal,query?:Record<string,string>):Promise<any>{
-    try{const response=await this.request(this.url(route,query),{...init,signal:AbortSignal.any([signal,AbortSignal.timeout(init.body&&typeof init.body!=='string'?1800000:15000)]),redirect:'error'})
+    try{const response=await this.request(this.url(route,query),{...init,signal:(AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal,AbortSignal.timeout(init.body&&typeof init.body!=='string'?1800000:15000)]),redirect:'error'})
       const reader=response.body?.getReader(),chunks:Uint8Array[]=[];let total=0
       try{if(reader)for(;;){const part=await reader.read();if(part.done)break;total+=part.value.byteLength;if(total>4*1024*1024)throw new TicketError('BAD_RESPONSE','工单响应过大');chunks.push(part.value)}}finally{await reader?.cancel().catch(()=>{})}
       let data:any;try{data=JSON.parse(Buffer.concat(chunks).toString())}catch{throw new TicketError('BAD_RESPONSE','工单服务器返回无效数据')}

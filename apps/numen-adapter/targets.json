@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "targets": [
+    {
+      "id": "1.20.1-fabric",
+      "minecraft": "1.20.1",
+      "loader": "fabric",
+      "java": 17,
+      "numen": "0.1.4.1",
+      "status": "dedicated-server-verified",
+      "verification": "scripts/verify/numen-matrix.cjs"
+    },
+    {
+      "id": "1.20.1-forge",
+      "minecraft": "1.20.1",
+      "loader": "forge",
+      "java": 17,
+      "numen": "0.1.4.1",
+      "status": "dedicated-server-verified",
+      "verification": "scripts/verify/numen-matrix.cjs"
+    },
+    {
+      "id": "1.21.1-fabric",
+      "minecraft": "1.21.1",
+      "loader": "fabric",
+      "java": 21,
+      "numen": "0.1.4.1",
+      "status": "dedicated-server-verified",
+      "verification": "scripts/verify/numen-server.cjs"
+    },
+    {
+      "id": "1.21.1-neoforge",
+      "minecraft": "1.21.1",
+      "loader": "neoforge",
+      "java": 21,
+      "numen": "0.1.4.1",
+      "status": "dedicated-server-verified",
+      "verification": "scripts/verify/numen-matrix.cjs"
+    }
+  ]
+}

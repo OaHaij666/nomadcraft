@@ -628,6 +628,7 @@ async function onRemovePlugin(p: PluginInfo) {
     toast('删除失败：' + errText(e), 'error')
   }
 }
+function reloadLauncher(): void { window.location.reload() }
 </script>
 
 <template>
@@ -679,8 +680,8 @@ async function onRemovePlugin(p: PluginInfo) {
 
        <section v-show="category === 'cloud'" class="card group cloud-settings-card">
          <div class="section-heading"><div><h3 class="group-title">NomadCraft 云端</h3><p class="muted group-hint">控制启动器参与云端计算的意愿。真正的实例、存档和权限仍由 NomadCraft 控制面决定。</p></div><button class="btn btn-ghost btn-sm" @click="openNomadCenter()">打开云端实例中心</button></div>
-         <div class="cloud-setting-row"><div><strong>作为玩家计算节点的意愿</strong><p class="muted">会在后续选择计算节点时作为偏好参考，不会强制占用你的电脑资源。</p></div><select class="input cloud-preference" :value="store.settings.cloudHostPreference ?? 'medium'" aria-label="云端计算意愿" @change="save({ cloudHostPreference: ($event.target as HTMLSelectElement).value as Settings['cloudHostPreference'] })"><option value="high">高：尽量参与</option><option value="medium">中：按需参与（默认）</option><option value="low">低：仅空闲时参与</option><option value="none">无：不作为计算节点</option></select></div>
-         <div class="cloud-setting-row"><div><strong>自动同步云端实例目录</strong><p class="muted">登录控制面后自动刷新实例、存档和权限摘要。</p></div><label class="switch"><input type="checkbox" aria-label="自动同步云端实例目录" :checked="store.settings.cloudAutoSync !== false" @change="save({ cloudAutoSync: ($event.target as HTMLInputElement).checked })"/><span class="switch-ui"></span></label></div>
+         <div data-section="cloud-host" class="cloud-setting-row"><div><strong>作为玩家计算节点的意愿</strong><p class="muted">会在后续选择计算节点时作为偏好参考，不会强制占用你的电脑资源。</p></div><select class="input cloud-preference" :value="store.settings.cloudHostPreference ?? 'medium'" aria-label="云端计算意愿" @change="save({ cloudHostPreference: ($event.target as HTMLSelectElement).value as Settings['cloudHostPreference'] })"><option value="high">高：尽量参与</option><option value="medium">中：按需参与（默认）</option><option value="low">低：仅空闲时参与</option><option value="none">无：不作为计算节点</option></select></div>
+         <div data-section="cloud-sync" class="cloud-setting-row"><div><strong>自动同步云端实例目录</strong><p class="muted">登录控制面后自动刷新实例、存档和权限摘要。</p></div><label class="switch"><input type="checkbox" aria-label="自动同步云端实例目录" :checked="store.settings.cloudAutoSync !== false" @change="save({ cloudAutoSync: ($event.target as HTMLInputElement).checked })"/><span class="switch-ui"></span></label></div>
          <div class="cloud-policy-note">本地光影、材质包和仅保存在玩家电脑上的数据不会因为云端实例选择而被自动上传。</div>
        </section>
 
@@ -1127,7 +1128,7 @@ async function onRemovePlugin(p: PluginInfo) {
               安装插件（.js）
             </button>
             <button data-ui="SettingsView:5032f71dc65d" class="btn btn-ghost btn-sm" @click="openPluginsDir">打开插件目录</button>
-            <button data-ui="SettingsView:ede794e781ff" v-if="pluginDirty" class="btn btn-gold btn-sm" @click="($event.target as HTMLButtonElement).blur(); location.reload()">重载启动器生效</button>
+            <button data-ui="SettingsView:ede794e781ff" v-if="pluginDirty" class="btn btn-gold btn-sm" @click="($event.target as HTMLButtonElement).blur(); reloadLauncher()">重载启动器生效</button>
           </div>
         </div>
       </details>

@@ -1,3 +1,5 @@
+import { registerCloudHostingIpc } from './core/cloudHosting'
+import { registerCloudDistributionIpc } from './core/cloudDistribution'
 import { assertCloudModsWritable } from './core/cloudResourceGuard'
 import { registerYsmIpc } from './core/ysm/service'
 import { registerNumenIpc } from './core/numen/service'
@@ -123,6 +125,8 @@ export function registerIpc(getWin: () => BrowserWindow | null): void {
   registerInstanceCenterIpc(getWin)
   registerNumenIpc(getWin)
   registerYsmIpc(getWin)
+  registerCloudDistributionIpc(getWin)
+  registerCloudHostingIpc()
   ipcMain.handle('nomad:storage', () => nomadCloud.storage())
   ipcMain.handle('nomad:setStorage', (_e, directory: string) => nomadCloud.setStorage(directory))
   ipcMain.handle(IPC.nomadStatus, () => nomadCloud.status())

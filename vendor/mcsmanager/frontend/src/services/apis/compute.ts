@@ -15,7 +15,7 @@ const create = useDefineApi<
 >({ url: "/api/nomad/hosting/nodes", method: "POST" });
 const update = useDefineApi<{ data: any }, ComputeNodeView>({ method: "PUT" });
 const runtime = useDefineApi<
-  { data: { placement: PlacementPolicy; ingress?: NetworkIngress | null } },
+  { data: { placement: PlacementPolicy; ingress?: NetworkIngress | null; gateway?:{enabled:boolean;backendPort:number}|null } },
   any
 >({ method: "PUT" });
 const check = useDefineApi<{}, NetworkReport>({ method: "POST" });
@@ -42,7 +42,7 @@ export const computeApi = {
   async runtime(
     instanceId: string,
     saveId: string,
-    data: { placement: PlacementPolicy; ingress?: NetworkIngress | null }
+    data: { placement: PlacementPolicy; ingress?: NetworkIngress | null; gateway?:{enabled:boolean;backendPort:number}|null }
   ) {
     return (
       await runtime().execute({

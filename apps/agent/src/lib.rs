@@ -15,6 +15,7 @@
 //! Like the control plane, the interesting logic is separated from I/O so it is
 //! testable: [`supervisor`] knows nothing about HTTP or sockets.
 
+pub mod numen_targets;
 pub mod config;
 pub mod hosting;
 pub mod control;
@@ -25,3 +26,7 @@ pub use control::{ControlClient, ControlError};
 pub use supervisor::{ServerSpec, ServerState, StopAction, StopPolicy, Supervisor};
 
 pub mod worker;
+
+pub mod loader_runtime;
+
+mod java_output;

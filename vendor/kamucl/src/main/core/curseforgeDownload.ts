@@ -20,7 +20,7 @@ export async function probeCurseForgeCdnUrl(url: string, signal?: AbortSignal): 
   try {
     const timeout = AbortSignal.timeout(8000)
     const res = await httpFetch(url, {
-      method: 'HEAD', redirect: 'manual', signal: signal ? AbortSignal.any([signal, timeout]) : timeout
+      method: 'HEAD', redirect: 'manual', signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
     })
     await res.body?.cancel()
     signal?.throwIfAborted()
@@ -47,7 +47,7 @@ export async function resolveCurseForgeFileUrl(projectID: number, fileID: number
     try {
       const timeout = AbortSignal.timeout(6000)
       const res = await httpFetch(`${source.base}/mods/${projectID}/files/${fileID}/download-url`, {
-        headers: source.headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout
+        headers: source.headers, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
       })
       if (!res.ok) { await res.body?.cancel(); continue }
       const data = await res.json() as { data?: unknown }
@@ -66,7 +66,7 @@ export async function curseForgeInstallDir(projectID: number, fileName: string, 
     try {
       const timeout = AbortSignal.timeout(6000)
       const res = await httpFetch(`${source.base}/mods/${projectID}`, {
-        headers: source.headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout
+        headers: source.headers, signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
       })
       if (!res.ok) { await res.body?.cancel(); continue }
       const { data } = await res.json() as { data?: { id?: number; classId?: number } }
@@ -86,7 +86,7 @@ export async function resolveCurseForgeMetadata(projectID: number, fileID: numbe
   for (const source of sources) {
     signal?.throwIfAborted()
     const timeout = AbortSignal.timeout(6000)
-    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+    const requestSignal = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
     try {
       const res = await httpFetch(`${source.base}/mods/${projectID}/files/${fileID}`, { signal: requestSignal, headers: source.headers })
       if (!res.ok) { await res.body?.cancel(); throw new Error(`文件信息 HTTP ${res.status}`) }
@@ -126,7 +126,7 @@ export async function exactModrinthDownload(file: ResolvedCfFile, signal?: Abort
     try {
       const timeout = AbortSignal.timeout(6000)
       const res = await httpFetch(`${base}/version_file/${file.sha1}?algorithm=sha1`, {
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        signal: signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout,
         headers: { 'User-Agent': 'KAMUCL (github.com/kamubaba-i/KAMUCL)' }
       })
       if (!res.ok) { await res.body?.cancel(); continue }

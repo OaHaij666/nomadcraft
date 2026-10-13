@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import {ref,onMounted,onUnmounted} from 'vue'
 import type {SupplementalFailure} from '@shared/supplementalMods'
+import type {FavoriteInstallResult} from '@shared/modFavorites'
 import {store,toast,refreshInstalled} from '../store'
 import {errText} from '../api'
 import UpdateDialogShell from './UpdateDialogShell.vue'
 const pending=ref<SupplementalFailure[]>([]),busy=ref(false),error=ref(''),hidden=ref(false)
-const off=window.kamucl.on('mods:supplementalPending',(list:SupplementalFailure[])=>{pending.value=list;hidden.value=false})
-onMounted(async()=>{try{pending.value=await window.kamucl.invoke('mods:supplementalList')}catch(e){toast(errText(e),'error')}})
+const off=window.kamucl.on('mods:supplementalPending',(list:unknown)=>{if(Array.isArray(list)){pending.value=list as SupplementalFailure[];hidden.value=false}})
+onMounted(async()=>{try{pending.value=await window.kamucl.invoke<SupplementalFailure[]>('mods:supplementalList')}catch(e){toast(errText(e),'error')}})
 onUnmounted(off)
 async function act(retry:boolean){const entry=pending.value[0];if(!entry||busy.value)return;busy.value=true;error.value=''
- try{const response=await window.kamucl.invoke(retry?'mods:supplementalRetry':'mods:supplementalKeep',entry.id,retry),result=retry?response.result:undefined;pending.value=retry?response.pending:response;store.failedInstalls.delete(entry.versionId);store.fsRefreshTick++;toast(result?`已安装 ${result.installed} 项收藏模组及 ${result.dependencies} 项必要前置，跳过 ${result.skipped.length} 项。模组目录：${result.modsDirectory}`:retry?'附加模组已安装完成':'已保留基础实例，可正常启动','success');try{await refreshInstalled()}catch(e){toast('安装结果已保存，实例列表刷新失败，请刷新：'+errText(e),'info')}}
+ try{let result:FavoriteInstallResult|undefined;if(retry){const response=await window.kamucl.invoke<{pending:SupplementalFailure[];result?:FavoriteInstallResult}>('mods:supplementalRetry',entry.id,true);result=response.result;pending.value=response.pending}else{pending.value=await window.kamucl.invoke<SupplementalFailure[]>('mods:supplementalKeep',entry.id)};store.failedInstalls.delete(entry.versionId);store.fsRefreshTick++;toast(result?`已安装 ${result.installed} 项收藏模组及 ${result.dependencies} 项必要前置，跳过 ${result.skipped.length} 项。模组目录：${result.modsDirectory}`:retry?'附加模组已安装完成':'已保留基础实例，可正常启动','success');try{await refreshInstalled()}catch(e){toast('安装结果已保存，实例列表刷新失败，请刷新：'+errText(e),'info')}}
  catch(e){error.value=errText(e)}finally{busy.value=false}
 }
 </script>

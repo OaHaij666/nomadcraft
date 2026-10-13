@@ -69,7 +69,7 @@ function paintAt(event: PointerEvent) {
   player.updateMatrixWorld(true); camera.updateMatrixWorld(true)
   raycaster.setFromCamera(new Vector2((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2), camera)
   const objects: Mesh[] = []
-  player.skin.traverseVisible(object => { if (object instanceof Mesh) { let node = object; while (node && node !== player.skin) { if (node.name === props.layer) { objects.push(object); break }; node = node.parent as Mesh } } })
+  player.skin.traverseVisible(object => { if (object instanceof Mesh) { let node: import('three').Object3D | null = object; while (node && node !== player.skin) { if (node.name === props.layer) { objects.push(object); break }; node = node.parent } } })
   const hit = raycaster.intersectObjects(objects, false)[0]
   if (!hit?.uv || hit.faceIndex == null) { emit('gap'); return }
   const mesh = hit.object as Mesh, uv = mesh.geometry.attributes.uv, group = Math.floor(hit.faceIndex / 2) * 4

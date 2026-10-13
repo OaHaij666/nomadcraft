@@ -169,7 +169,7 @@ async function sidecarHashes(url: string, mirror: MirrorPref, signal?: AbortSign
     // active-time budget only after a slot is available, and stop its clock while
     // paused, including a body received before the user resumes consumption.
     const release = await downloadLimiter.acquire(signal)
-    const timeout = new AbortController(), requestSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal
+    const timeout = new AbortController(), requestSignal = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout.signal]) : timeout.signal
     inheritTaskControl(signal, requestSignal)
     let elapsed = 0, last = performance.now()
     const timer = setInterval(() => {

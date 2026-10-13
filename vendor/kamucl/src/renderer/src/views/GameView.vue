@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { cloudPreparation, prepareKey, useCloudInstance } from '../cloudPreparation'
 import { formatReleaseTime } from '@shared/releaseTime'
 import { openInstanceCenter } from '../instanceCenter'
 import ContentSkeleton from '../components/ContentSkeleton.vue'
@@ -34,7 +35,7 @@ import {
   setVersionResolution,
   updateVersionCategories
 } from '../api'
-import { cloudSyncText, cloudSyncTone, selectCloudInstance, selectInstance, applyLaunchState, displayVersionName, displayVersionSub, fmtLastPlayed, isFavorite, openNomadCenter, progressMono, refreshInstalled, renameLastPlayed, sortWithFavorite, store, toast, toggleFavorite, versionIconUrl } from '../store'
+import { refreshCloudInstances, cloudCan, cloudSyncText, cloudSyncTone, selectCloudInstance, selectInstance, applyLaunchState, displayVersionName, displayVersionSub, fmtLastPlayed, isFavorite, openNomadCenter, progressMono, refreshInstalled, renameLastPlayed, sortWithFavorite, store, toast, toggleFavorite, versionIconUrl } from '../store'
 import { instanceLaunchBusy } from '@shared/launchTracking'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import IconPickerModal from '../components/IconPickerModal.vue'
@@ -63,6 +64,8 @@ import type {
 
 // 列表范围独立于安装目标，保留其他页面的当前目录语义。
 const allInstalled = ref<InstalledVersion[]>([])
+// Automatically materialized cloud clients are represented by their cloud cards.
+const localInstalled = computed(() => allInstalled.value.filter(v => !/^nc-[0-9a-f]{12}-[0-9a-f]{12}$/.test(v.id) || !Object.values(store.settings?.cloudInstanceBindings ?? {}).some(b => b.localVersionId === v.id && b.localFolder?.replace(/\\/g, '/').toLowerCase() === v.folder?.replace(/\\/g, '/').toLowerCase())))
 const installedFolder = ref('')
 const installedError = ref('')
 const installedLoading = ref(false)
@@ -72,7 +75,7 @@ const installedCategory = ref(VERSION_CATEGORY_ALL), categoryManagerOpen = ref(f
 const categories = computed(() => store.settings?.versionCategories ?? [])
 const categoryOf = (v: InstalledVersion) => versionCategoryOf(store.settings, v.folder, v.id, window.kamucl.platform)
 const categoryLabel = (v: InstalledVersion) => categories.value.find(c => c.id === categoryOf(v))?.name ?? ''
-const categoryCounts = computed(() => Object.fromEntries(categories.value.map(c => [c.id, allInstalled.value.filter(v => categoryOf(v) === c.id).length])))
+const categoryCounts = computed(() => Object.fromEntries(categories.value.map(c => [c.id, localInstalled.value.filter(v => categoryOf(v) === c.id).length])))
 watch(categories, list => { if (![VERSION_CATEGORY_ALL, VERSION_CATEGORY_FAVORITES, VERSION_CATEGORY_UNCLASSIFIED, ...list.map(c => c.id)].includes(installedCategory.value)) installedCategory.value = VERSION_CATEGORY_ALL })
 async function onCategoryAction(action: VersionCategoryAction): Promise<boolean> {
   if (categoryBusy.value) return false
@@ -115,7 +118,8 @@ let lastAttempt = 0
 let catalogTimer: ReturnType<typeof setInterval> | undefined
 
 /** Each visit starts with local instances; remote metadata is loaded only on demand. */
-const tab = ref<'download' | 'installed'>('installed')
+const tab = ref<'download' | 'installed' | 'cloud'>(store.gameInstanceTab ?? (store.resourceInstanceSource === 'cloud' || !store.installed.length ? 'cloud' : 'installed'))
+watch(tab, value => { store.gameInstanceTab = value; if (value === 'cloud') void refreshCloudInstances() })
 watch(tab, value => { if (value === 'download') void load() })
 
 // ---------------- Tab 滑动指示块（版本下载 ⇄ 已安装 平滑滑动，与导航水滴同款弹簧动效） ----------------
@@ -132,7 +136,7 @@ function updateTabBlob() {
 }
 watch(tab, () => nextTick(updateTabBlob))
 // 滑块宽度自适应：已安装数量变化（已安装（14）宽度变）与容器尺寸变化都重算
-watch(() => store.installed.length, () => nextTick(updateTabBlob))
+watch([() => allInstalled.value.length, () => store.cloudInstances.length], () => nextTick(updateTabBlob))
 let tabBlobObserver: ResizeObserver | null = null
 onMounted(() => {
   nextTick(updateTabBlob)
@@ -357,6 +361,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', checkCatalogOnReturn)
   catalogTimer = setInterval(() => { if (tab.value === 'download' && document.visibilityState === 'visible') void load() }, 5 * 60_000)
   void loadFolderState()
+  void refreshCloudInstances()
 })
 
 // ---------------- 搜索与筛选（搜索框联动顶栏 store.searchKeyword） ----------------
@@ -708,13 +713,11 @@ const folderShortName = (p: string): string => {
 }
 
 /** 收藏置顶 + 组内最近游玩倒序 */
-const scopedInstalled = computed(() => allInstalled.value.filter(v => !installedFolder.value || folderKey(v.folder) === folderKey(installedFolder.value === '@current' ? activeFolder.value : installedFolder.value)).filter(v => `${displayVersionName(v)} ${v.mcVersion || ''} ${v.loader || ''} ${folderShortName(v.folder)}`.toLowerCase().includes(installedSearch.value.trim().toLowerCase())))
+const scopedInstalled = computed(() => localInstalled.value.filter(v => !installedFolder.value || folderKey(v.folder) === folderKey(installedFolder.value === '@current' ? activeFolder.value : installedFolder.value)).filter(v => `${displayVersionName(v)} ${v.mcVersion || ''} ${v.loader || ''} ${folderShortName(v.folder)}`.toLowerCase().includes(installedSearch.value.trim().toLowerCase())))
 const sortedInstalled = computed(() => sortWithFavorite(scopedInstalled.value.filter(v => versionMatchesCategory(installedCategory.value, categoryOf(v), isFavorite(v.id, v.folder)))))
 const sortedCloud = computed(() => store.cloudInstances)
-function chooseCloudContext(version: typeof store.cloudInstances[number]) {
-  selectCloudInstance(version.id)
-  toast(`已选择云端实例：${displayVersionName(version)}`, 'info')
-}
+const preparationFor = (v: typeof store.cloudInstances[number]) => cloudPreparation[prepareKey({instanceId: v.cloudInstanceId, saveId: v.cloudSaveId})]
+async function chooseCloudContext(version: typeof store.cloudInstances[number]) { await useCloudInstance(version) }
 const categoryFilters = computed(() => [
   { id: VERSION_CATEGORY_ALL, name: '全部', count: scopedInstalled.value.length },
   { id: VERSION_CATEGORY_FAVORITES, name: '收藏', count: scopedInstalled.value.filter(v => isFavorite(v.id, v.folder)).length },
@@ -975,23 +978,33 @@ async function confirmIsolation() {
   <div class="page" :data-design-page="tab">
     <!-- 标题 -->
     <div class="page-head">
-      <h1 class="page-title">游戏版本</h1>
-      <p class="page-sub">浏览、安装与管理 Minecraft 版本</p>
+      <h1 class="page-title">游戏实例</h1>
+      <p class="page-sub">{{ tab === 'cloud' ? '选择云端实例，查看本地目录与同步状态' : tab === 'installed' ? '管理这台电脑上的 Minecraft 实例' : '下载 Minecraft 版本并安装到这台电脑' }}</p>
     </div>
 
       <div class="game-tabs" ref="gameTabs">
         <span class="game-tabs-blob" :style="tabBlobStyle" aria-hidden="true"></span>
-        <button class="game-tab" data-tab="download" :class="{ active: tab === 'download' }" @click="tab = 'download'">
-          版本下载
-        </button>
-        <button class="game-tab" data-tab="installed" :class="{ active: tab === 'installed' }" @click="tab = 'installed'">
-          已安装<template v-if="allInstalled.length">（{{ allInstalled.length }}）</template>
-        </button>
+        <button class="game-tab" data-tab="cloud" :class="{ active: tab === 'cloud' }" @click="tab = 'cloud'">云端实例<template v-if="sortedCloud.length">（{{ sortedCloud.length }}）</template></button>
+        <button class="game-tab" data-tab="installed" :class="{ active: tab === 'installed' }" @click="tab = 'installed'">本地实例<template v-if="localInstalled.length">（{{ localInstalled.length }}）</template></button>
+        <button class="game-tab" data-tab="download" :class="{ active: tab === 'download' }" @click="tab = 'download'">本地下载</button>
       </div>
 
 
+    <section v-if="tab === 'cloud'" class="card cloud-instance-panel" aria-label="云端实例">
+      <header class="cloud-instance-header"><div><strong>{{ store.cloudSignedIn ? '已连接的云端服务' : '使用云端实例' }}</strong><p class="muted">{{ store.cloudSignedIn ? store.cloudAddress : '登录你的 NomadCraft 服务，即可选择有权访问的实例与存档。' }}</p></div><div class="cloud-panel-actions"><button v-if="store.cloudSignedIn" class="btn btn-ghost btn-sm" :disabled="store.cloudLoading" @click="refreshCloudInstances">{{ store.cloudLoading ? '检查中…' : '刷新状态' }}</button><button class="btn btn-gold btn-sm" @click="openNomadCenter">{{ store.cloudSignedIn ? '打开云端实例中心' : '登录云端服务' }}</button></div></header>
+      <p class="cloud-instance-hint muted">云端决定游戏版本、加载器与共享资源；本机目录用于保存客户端文件。实例配置和资源修改按云端权限管理。</p>
+      <p v-if="store.cloudError" class="error" role="alert">{{ store.cloudError }}<button class="btn btn-ghost btn-sm" @click="openNomadCenter">检查云端连接</button></p>
+      <div v-if="store.cloudLoading && !sortedCloud.length" class="empty" role="status">正在读取云端实例…</div>
+      <div v-else-if="!sortedCloud.length" class="empty cloud-instance-empty"><strong>{{ store.cloudSignedIn ? '当前服务没有可用的云端实例' : '尚未连接云端服务' }}</strong><span>{{ store.cloudSignedIn ? '在云端实例中心创建实例，或请实例管理员授予你访问权限。' : '连接后可查看云端实例、绑定本地目录并同步游戏文件。' }}</span><button class="btn btn-gold btn-sm" @click="openNomadCenter">{{ store.cloudSignedIn ? '进入实例中心' : '连接并登录' }}</button></div>
+      <div v-for="version in sortedCloud" :key="version.id" class="cloud-installed-row" :class="{ 'cloud-selected': store.resourceInstanceSource === 'cloud' && store.resourceVersionId === version.id }">
+        <span class="instance-cloud-mark">NC</span>
+        <div class="inst-names"><strong class="instance-name">{{ displayVersionName(version) }}</strong><div class="instance-meta"><span>{{ version.mcVersion || '版本未知' }}</span><span>{{ version.loader || '原版' }}</span><span>{{ cloudCan(version, 'mods.manage') ? '可管理资源' : '资源只读' }}</span><span :class="cloudSyncTone(version)">{{ cloudSyncText(version) }}</span></div><span class="cloud-local-path" :title="version.cloudLocalFolder">本地目录：{{ version.cloudLocalFolder || '选择实例后自动创建' }}</span><span v-if="preparationFor(version)" class="cloud-preparation-message" :class="{ error: preparationFor(version)?.state === 'error' }" role="status">{{ preparationFor(version)?.message }}<template v-if="preparationFor(version)?.busy && preparationFor(version)?.progress !== undefined"> · {{ Math.round((preparationFor(version)?.progress || 0) * 100) }}%</template></span><span v-else-if="version.cloudSyncMessage" class="muted cloud-sync-message">{{ version.cloudLocalFolder ? version.cloudSyncMessage : '选择此实例后，自动安装匹配客户端并同步云端文件。' }}</span></div>
+        <div class="row-actions"><button class="btn btn-ghost btn-sm" :disabled="!cloudCan(version, 'instance.read') || preparationFor(version)?.busy" @click="chooseCloudContext(version)">{{ store.resourceInstanceSource === 'cloud' && store.resourceVersionId === version.id ? '重新准备' : '选择并准备' }}</button><button class="btn btn-gold btn-sm" :disabled="!cloudCan(version, 'instance.read') || preparationFor(version)?.busy" @click="useCloudInstance(version, true)">{{ preparationFor(version)?.busy ? '正在准备…' : '准备并加入' }}</button><button class="btn btn-ghost btn-sm" @click="openNomadCenter">管理</button></div>
+      </div>
+    </section>
+
     <!-- 安装目标与下方列表筛选独立。 -->
-    <section class="card folder-manager" data-ui="games:folders" @contextmenu.prevent="showFolderContextMenu(activeFolder)">
+    <section v-if="tab !== 'cloud'" class="card folder-manager" data-ui="games:folders" @contextmenu.prevent="showFolderContextMenu(activeFolder)">
       <div class="folder-manager-main">
         <div class="folder-select-wrap">
           <span class="folder-caption">默认下载位置</span>
@@ -1148,7 +1161,7 @@ async function confirmIsolation() {
       </div>
     </div>
     <!-- 已安装区 -->
-    <div v-else class="card installed-card">
+    <div v-if="tab === 'installed'" class="card installed-card">
       <!-- 安装中（进度显示） -->
       <div v-if="installingVersions.length" class="installing-block">
         <div v-for="id in installingVersions" :key="id" class="installed-row installing-row">
@@ -1190,18 +1203,10 @@ async function confirmIsolation() {
         <button class="btn btn-ghost btn-sm" data-ui="games:categories-manage" :disabled="categoryBusy" @click="categoryError = ''; categoryManagerOpen = true">管理分类</button>
       </div>
       <p v-if="categoryError && !categoryManagerOpen" class="error" role="alert">{{ categoryError }}</p>
-      <section v-if="sortedCloud.length" class="cloud-installed-block" aria-label="云端实例">
-        <header><div><strong>云端实例</strong><span class="muted">云端逻辑实例也显示在实例管理中；本地客户端目录和同步状态由云端实例中心绑定。</span></div><button class="btn btn-ghost btn-sm" @click="openNomadCenter">打开云端实例中心</button></header>
-        <div v-for="version in sortedCloud" :key="version.id" class="cloud-installed-row">
-          <span class="instance-cloud-mark">NC</span>
-          <div class="inst-names"><strong class="instance-name">{{ displayVersionName(version) }}</strong><div class="instance-meta"><span>{{ version.mcVersion || '版本未知' }}</span><span>云端逻辑实例</span><span :class="cloudSyncTone(version)">{{ cloudSyncText(version) }}</span><span class="instance-directory">{{ version.folder || '未绑定本地目录' }}</span></div></div>
-          <div class="row-actions"><button class="btn btn-ghost btn-sm" @click="chooseCloudContext(version)">选择</button><button class="btn btn-ghost btn-sm" @click="openNomadCenter">绑定与同步</button></div>
-        </div>
-      </section>
       <div v-if="!sortedInstalled.length && !installingVersions.length" class="empty installed-empty">
         <span>{{ installedLoading ? '正在读取已安装实例…' : installedCategory === VERSION_CATEGORY_FAVORITES ? '此范围还没有收藏版本，点击实例旁的星标即可收藏' : installedCategory !== VERSION_CATEGORY_ALL ? '此分类暂无匹配实例，可在实例的更多操作中设置分类' : installedSearch ? '没有匹配的实例，请调整搜索条件' : '当前范围没有已安装版本' }}</span>
         <button v-if="installedCategory !== VERSION_CATEGORY_ALL" class="btn btn-ghost btn-sm" @click="installedCategory = VERSION_CATEGORY_ALL">查看全部版本</button>
-        <button v-else class="btn btn-gold btn-sm" @click="tab = 'download'">去版本下载看看</button>
+        <template v-else><div class="cloud-panel-actions"><button class="btn btn-gold btn-sm" @click="tab = 'download'">下载本地版本</button><button class="btn btn-ghost btn-sm" @click="tab = 'cloud'">使用云端实例</button></div></template>
       </div>
       <div v-else class="installed-list">
         <!-- 同一实例仅渲染一次；sortWithFavorite 已负责收藏置顶。 -->
@@ -1564,6 +1569,9 @@ async function confirmIsolation() {
 </template>
 
 <style scoped>
+.cloud-instance-panel{padding:20px;overflow:hidden}.cloud-instance-header{display:flex;align-items:center;justify-content:space-between;gap:16px}.cloud-instance-header strong{font-size:16px}.cloud-instance-header p{margin:6px 0 0;overflow-wrap:anywhere}.cloud-panel-actions{display:flex;gap:8px;flex-shrink:0}.cloud-instance-hint{font-size:12px;line-height:1.8;margin:16px 0;padding-bottom:16px;border-bottom:1px solid var(--border)}.cloud-instance-empty{gap:14px;text-align:center;line-height:1.7}.cloud-local-path{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cloud-local-path,.cloud-sync-message{font-size:12px;line-height:1.7;overflow-wrap:anywhere}.cloud-instance-panel .cloud-installed-row.cloud-selected{background:var(--accent-soft);border-radius:10px}.cloud-instance-panel .inst-names{min-width:0}.cloud-instance-panel .instance-name{white-space:normal}.cloud-instance-panel .cloud-installed-row{min-width:0}.cloud-instance-panel .row-actions{display:flex;flex-wrap:wrap;gap:8px}.cloud-instance-panel .synced{color:var(--ok)}.cloud-instance-panel .warning{color:var(--accent-2)}
+@media(max-width:800px){.cloud-instance-header{align-items:flex-start;flex-direction:column}.cloud-instance-panel .cloud-installed-row{grid-template-columns:36px minmax(0,1fr)}.cloud-instance-panel .row-actions{grid-column:2;justify-content:flex-start}}
+
 .version-category-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}.version-category-filters{display:flex;flex-wrap:wrap;gap:6px;min-width:0}.version-category-filters button{max-width:100%;overflow-wrap:anywhere;white-space:normal}.version-category-filters button.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}.category-count{opacity:.75;margin-left:3px}.instance-category{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent)}.instance-category-field{display:flex;flex-direction:column;gap:6px;padding:10px 12px;font-size:13px}.instance-category-field select{width:100%;min-width:0}.instance-category-error{padding:0 12px;line-height:1.6;overflow-wrap:anywhere}@media(max-width:600px){.version-category-bar{flex-wrap:wrap}.version-category-bar>button{margin-left:auto}}
 .install-location { margin: 0; padding: 4px 24px 10px; overflow-wrap: anywhere; flex-shrink: 0; font-size: var(--text-sm); }
 .folder-location-hint { margin: var(--space-2) 0 0; line-height: 1.6; }

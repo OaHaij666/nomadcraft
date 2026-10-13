@@ -47,7 +47,7 @@ test('fix-3: capsule blob follows selection under theme/layout changes via Resiz
   assert.match(cv, /watch\(\(\) => store\.settings\?\.theme/)
   const gv = read('src/renderer/src/views/GameView.vue')
   assert.match(gv, /tabBlobObserver = new ResizeObserver/)
-  assert.match(gv, /watch\(\(\) => store\.installed\.length/)
+  assert.match(gv, /watch\(\[\(\) => allInstalled\.value\.length, \(\) => store\.cloudInstances\.length\]/)
 })
 
 test('fix-5: chunked engine stays removed; single connection only (修复5)', () => {

@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.nomadcraft.numen.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ServerMixin",
+    "SummonMixin",
+    "SkinMixin",
+    "SummonRequestMixin",
+    "SummonCommandMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

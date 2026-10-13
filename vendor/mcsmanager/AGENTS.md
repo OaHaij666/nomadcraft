@@ -38,31 +38,9 @@ Therefore, when you modify a feature or implement a requirement, **you must thin
 - **`common/`** — Shared library published as `mcsmanager-common`. panel/daemon alias it to **source** (`common/src/index.ts`) via tsconfig `paths` + webpack `resolve.alias`, so edits are compiled directly into both apps — no publish step needed, but each app must be rebuilt to pick up changes.
 - **`languages/`** — Root-level i18n JSON shared by all three subprojects (`@languages` alias). Filenames use capital region (`en_US.json`); runtime locale codes are lowercase (`en_us`) — don't mix them up.
 
-## 3. OpenSpec Development Workflow (MANDATORY)
+## 3. Development Workflow
 
-All non-trivial development in this repo goes through **OpenSpec** (spec-driven development). Workflow skills live in `.agents/skills/openspec-*` (tool-neutral, shared by all AI tools); artifacts live in `openspec/` (`config.yaml`, `specs/`, `changes/`). **If any generic process skill (brainstorming, planning, TDD kickoff, etc.) conflicts with this section, this section wins.**
-
-**Must follow OpenSpec** (propose → implement → archive):
-
-- New features or behavior changes (any module)
-- Cross-module or external interface changes (APIs, instance configs, data formats, node/panel protocols)
-- Changes that restructure how components fit together
-
-**Exempt** (plain implementation is fine):
-
-- Bug fixes that do not change behavior contracts
-- Pure refactors with no behavior change
-- Test-only or doc-only edits, dependency bumps, small single-file patches
-
-**Flow:**
-
-1. Not sure what to build yet? Start with the [`openspec-explore`](.agents/skills/openspec-explore/SKILL.md) skill to weigh options before committing.
-2. [`openspec-propose`](.agents/skills/openspec-propose/SKILL.md) `<change-id>` — creates `openspec/changes/<change-id>/` (proposal.md, specs/, design.md, tasks.md).
-3. Human reviews the artifacts **before any code is written**; revise via [`openspec-update-change`](.agents/skills/openspec-update-change/SKILL.md) if needed.
-4. [`openspec-apply-change`](.agents/skills/openspec-apply-change/SKILL.md) — implement the tasks. Every task ends with its relevant test suite (§4, §10); the §10 testing gate still applies and must pass before a task is marked complete.
-5. [`openspec-archive-change`](.agents/skills/openspec-archive-change/SKILL.md) — move the change to `openspec/changes/archive/` and sync spec deltas into `openspec/specs/` ([`openspec-sync-specs`](.agents/skills/openspec-sync-specs/SKILL.md)).
-
-Durable project knowledge stays in this file and `docs/`; `openspec/config.yaml` carries only concise constraints for artifact generation. After a CLI upgrade run `openspec update` in the repo root to refresh the generated skills.
+Implement authorized requirements directly. Keep implementation notes, remaining work and validation evidence in ordinary documents under `docs/`. Run the relevant test suites and build checks before reporting completion; the testing rules in sections 4 and 10 continue to apply.
 
 ## 4. Commands
 

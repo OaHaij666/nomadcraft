@@ -16,11 +16,34 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@languages/*": ["../languages/*"],
-      "mcsmanager-common": ["../common/src/index.ts"],
-      "*": ["node_modules/*", "src/types/*"]
-    }
+      "@languages/*": [
+        "../languages/*"
+      ],
+      "mcsmanager-common": [
+        "../common/src/index.ts"
+      ],
+      "*": [
+        "node_modules/*",
+        "src/types/*"
+      ]
+    },
+    "lib": [
+      "ES2022"
+    ],
+    "typeRoots": [
+      "../../kamucl/node_modules/@types",
+      "node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*", "../common/global.d.ts"],
-  "exclude": ["src/**/*.test.ts", "test/**"]
+  "include": [
+    "src/**/*",
+    "../common/global.d.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "test/**"
+  ]
 }

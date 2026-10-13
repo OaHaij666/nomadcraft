@@ -203,7 +203,7 @@ export class NomadCatalog {
         ...structuredClone(instance),
         saves: saves.map(save => {
           const lease = state.hosting?.leases.find(l => l.instanceId === instance.id && l.saveId === save.id);
-          const hosting = lease ? {phase: lease.leaseExpiresAt < Date.now() && !["stopped", "failed"].includes(lease.phase) ? "failed" as const : lease.phase, epoch:lease.epoch,nodeName:lease.nodeName,holderName:lease.holderName,leaseExpiresAt:lease.leaseExpiresAt,joinAddress:["ready","checkpointing"].includes(lease.phase) && lease.leaseExpiresAt > Date.now() && save.room?.desiredState === "open" ? lease.joinAddress : null,checkpoint:lease.checkpoint,error:lease.error} : null;
+          const hosting = lease ? {phase: lease.leaseExpiresAt < Date.now() && !["stopped", "failed"].includes(lease.phase) ? "failed" as const : lease.phase, epoch:lease.epoch,nodeName:lease.nodeName,holderName:lease.holderName,leaseExpiresAt:lease.leaseExpiresAt,joinAddress:["ready","checkpointing"].includes(lease.phase) && lease.leaseExpiresAt > Date.now() && save.room?.desiredState === "open" ? lease.joinAddress : null,checkpoint:lease.checkpoint,error:lease.error,...(lease.handover?{handover:structuredClone(lease.handover)}:{})} : null;
           return {...structuredClone(save), hosting, hostingAllowed:this.allowedHost(instance,actor,save.id)};
         }),
         releases: structuredClone((instance.releases ?? []).filter(r => permissions.includes("instance.read") || saves.some(s => s.releaseId === r.id))),
@@ -251,7 +251,7 @@ export class NomadCatalog {
       if((save.placement??DEFAULT_PLACEMENT).mode!=="manual")fail(409,"automatic_placement_enabled");
       if(!save.room || save.room.desiredState !== "open") fail(409,"room_not_open");
       const release = instance.releases?.find(r => r.id === save.releaseId);
-      if(!release?.server || !release.serverArtifact || release.server.type !== "vanilla" || !release.server.eulaAccepted) fail(409,"vanilla_server_required");
+      if(!release?.server || !release.serverArtifact || !["vanilla","fabric","forge","neoforge","paper"].includes(release.server.type) || !release.server.eulaAccepted) fail(409,"supported_server_required");
       const hosting = this.hostState(state), now = Date.now();
       hosting.grants = hosting.grants.filter(g => g.expiresAt > now || hosting.leases.some(l => l.grantId === g.id && l.leaseExpiresAt + HOST_FENCE_GRACE_MS > now));
       if(hosting.grants.length >= 500) fail(429,"executor_limit");
@@ -276,19 +276,30 @@ export class NomadCatalog {
     if(!lease || lease.grantId!==grant.id || lease.epoch!==epoch || lease.leaseExpiresAt+HOST_FENCE_GRACE_MS<Date.now() || ["stopped","failed"].includes(lease.phase)) return fail(409,"stale_host_epoch");
     return lease;
   }
+  private handoverRestorable(lease:HostLease,now=Date.now()) {
+    const handover=lease.handover;
+    if(!handover||handover.phase!=="restoring"||lease.checkpoint?.final!==true||lease.checkpoint.epoch!==(handover.checkpointEpoch??handover.sourceEpoch))return false;
+    return lease.phase==="stopped" || lease.phase==="starting"&&lease.leaseExpiresAt+HOST_FENCE_GRACE_MS<now;
+  }
   async claimExecutor(grant:ExecutorGrant, actor:CatalogActor) {
     return this.mutate(state=>{
       const instance=findInstance(state,grant.instanceId),save=findSave(instance,grant.saveId);
       if(!this.allowedHost(instance,actor,save.id)) fail(403,"hosting_forbidden");
       if(save.room?.desiredState!=="open") fail(409,"room_not_open");
       if((save.placement??DEFAULT_PLACEMENT).mode!=="manual"&&!grant.nodeId)fail(409,"automatic_placement_enabled");
-      if(grant.nodeId){const n=this.computeNodes(state).find(n=>n.id===grant.nodeId);if(!n||!n.enabled||n.lastSeenAt+NODE_ONLINE_MS<Date.now()||n.ownerId!==actor.id||!this.nodeAllowed(n,instance.id)||save.placement?.mode==="fixed"&&save.placement.nodeId!==n.id)fail(403,"node_not_authorized");const load=this.nodeLoad(state,n!.id,grant.id);if(load.tasks>=n!.maxTasks||load.memory+512+(instance.releases?.find(r=>r.id===save.releaseId)?.server?.memoryMb??0)>n!.memoryBudgetMb)fail(409,"node_capacity_exceeded");}
+      const pending=this.hostState(state).leases.find(l=>l.instanceId===instance.id&&l.saveId===save.id);
+      const handoverTarget=pending?.handover?.phase==="restoring"?pending.handover.targetNodeId:undefined;
+      if(grant.nodeId){const n=this.computeNodes(state).find(n=>n.id===grant.nodeId);if(!n||!n.enabled||n.lastSeenAt+NODE_ONLINE_MS<Date.now()||n.ownerId!==actor.id||!this.nodeAllowed(n,instance.id)||(handoverTarget?handoverTarget!==n.id:save.placement?.mode==="fixed"&&save.placement.nodeId!==n.id))fail(403,"node_not_authorized");const load=this.nodeLoad(state,n!.id,grant.id);if(load.tasks>=n!.maxTasks||load.memory+512+(instance.releases?.find(r=>r.id===save.releaseId)?.server?.memoryMb??0)>n!.memoryBudgetMb)fail(409,"node_capacity_exceeded");}
       const release=instance.releases?.find(r=>r.id===save.releaseId);
-      if(!release?.server || release.server.type!=="vanilla") return fail(409,"vanilla_server_required");
+      if(!release?.server || !["vanilla","fabric","forge","neoforge","paper"].includes(release.server.type)) return fail(409,"supported_server_required");
       const hosting=this.hostState(state),previous=hosting.leases.find(l=>l.instanceId===instance.id && l.saveId===save.id),now=Date.now();
       if(previous && !["stopped","failed"].includes(previous.phase) && previous.leaseExpiresAt+HOST_FENCE_GRACE_MS>now) fail(409,"host_busy");
+      if(previous?.handover && previous.handover.phase!=="completed") {
+        if(!this.handoverRestorable(previous,now))fail(409,"handover_final_checkpoint_required");
+        if(grant.nodeId!==previous.handover.targetNodeId)fail(403,"handover_target_required");
+      }
       if(grant.expiresAt<now) fail(401,"executor_expired");
-      const lease:HostLease={instanceId:instance.id,saveId:save.id,grantId:grant.id,phase:"starting",epoch:(previous?.epoch??0)+1,nodeName:grant.nodeName,holderName:actor.name,leaseExpiresAt:now+HOST_LEASE_MS,joinAddress:null,checkpoint:previous?.checkpoint??null,error:""};
+      const lease:HostLease={instanceId:instance.id,saveId:save.id,grantId:grant.id,phase:"starting",epoch:(previous?.epoch??0)+1,nodeName:grant.nodeName,holderName:actor.name,leaseExpiresAt:now+HOST_LEASE_MS,joinAddress:null,checkpoint:previous?.checkpoint??null,error:"",...(previous?.handover?.phase==="restoring"?{handover:previous.handover}:{})};
       const storedGrant=hosting.grants.find(g=>g.id===grant.id);if(storedGrant)storedGrant.expiresAt=0;
       hosting.leases=hosting.leases.filter(l=>!(l.instanceId===instance.id && l.saveId===save.id)); hosting.leases.push(lease);
       log(instance,actor,"hosting.claim",save.id);
@@ -300,31 +311,58 @@ export class NomadCatalog {
     if(!release) return fail(404,"release_not_found");
     return structuredClone({lease,release,save,checkpoint:lease.checkpoint});
   }
+  async requestHandover(actor:CatalogActor,id:string,saveId:string,targetNodeId:string,lookup:(id:string)=>(CatalogActor & {willingness?:HostingWillingness})|null) {
+    return this.mutate(state=>{
+      const instance=findInstance(state,id),save=findSave(instance,saveId);
+      requirePermission(instance,actor,"room.manage",saveId);
+      const lease=this.hostState(state).leases.find(l=>l.instanceId===id&&l.saveId===saveId);
+      if(!lease||lease.phase!=="ready"||lease.leaseExpiresAt<=Date.now()||save.room?.desiredState!=="open")fail(409,"handover_host_not_ready");
+      if(lease!.handover&&lease!.handover.phase!=="completed")fail(409,"handover_in_progress");
+      const current=this.hostState(state).grants.find(g=>g.id===lease!.grantId);
+      if(current?.nodeId===targetNodeId)fail(400,"handover_same_node");
+      const target=this.computeNodes(state).find(n=>n.id===targetNodeId),owner=target?lookup(target.ownerId):null;
+      if(!target||!target.enabled||target.lastSeenAt+NODE_ONLINE_MS<Date.now()||!owner||!this.nodeAllowed(target,id)||!this.allowedHost(instance,owner,saveId))fail(403,"handover_target_unavailable");
+      if(target!.kind==="player"&&owner!.willingness==="none")fail(403,"handover_target_unavailable");
+      const release=instance.releases?.find(r=>r.id===save.releaseId),load=this.nodeLoad(state,target!.id);
+      if(!target!.metrics||target!.metrics.cpuCores<1)fail(403,"handover_target_unavailable");
+      if(target!.metrics!.availableMemoryMb<(release?.server?.memoryMb??0)+512+target!.reserveMemoryMb)fail(409,"node_capacity_exceeded");
+      if(load.tasks>=target!.maxTasks||load.memory+512+(release?.server?.memoryMb??0)>target!.memoryBudgetMb)fail(409,"node_capacity_exceeded");
+      lease!.handover={id:uuid(),targetNodeId,requestedAt:Date.now(),requestedBy:actor.id,phase:"saving",sourceEpoch:lease!.epoch};
+      log(instance,actor,"hosting.handover.request",saveId);
+      return lease!.handover;
+    });
+  }
   async executorHeartbeat(grant:ExecutorGrant,actor:CatalogActor,epoch:number,input:any) {
     return this.mutate(state=>{
       const lease=this.currentLease(state,grant,epoch),instance=findInstance(state,grant.instanceId),save=findSave(instance,grant.saveId);
       const node=grant.nodeId?this.computeNodes(state).find(n=>n.id===grant.nodeId):undefined;
-      const stop=save.room?.desiredState!=="open" || !this.allowedHost(instance,actor,save.id) || !!grant.nodeId&&(!node||!node.enabled||!this.nodeAllowed(node,instance.id));
-      if(stop){const now=Date.now();lease.stopDeadlineAt??=now+HOST_FINAL_SAVE_MS;lease.leaseExpiresAt=Math.min(now+HOST_LEASE_MS,lease.stopDeadlineAt);lease.phase="stopping";lease.joinAddress=null;return {stop:true,leaseExpiresAt:lease.leaseExpiresAt,phase:lease.phase};}
+      const stop=lease.handover?.phase==="saving" || save.room?.desiredState!=="open" || !this.allowedHost(instance,actor,save.id) || !!grant.nodeId&&(!node||!node.enabled||!this.nodeAllowed(node,instance.id));
+      if(stop){const now=Date.now();lease.stopDeadlineAt??=now+HOST_FINAL_SAVE_MS;lease.leaseExpiresAt=Math.min(now+HOST_LEASE_MS,lease.stopDeadlineAt);lease.phase="stopping";lease.joinAddress=null;return {stop:true,leaseExpiresAt:lease.leaseExpiresAt,phase:lease.phase,handover:lease.handover};}
       lease.leaseExpiresAt=Date.now()+HOST_LEASE_MS;
       if(["starting","checkpointing","stopping"].includes(input.phase) || (input.phase === "ready" && lease.joinAddress && lease.phase !== "stopping")) lease.phase=input.phase;
       return {stop:false,leaseExpiresAt:lease.leaseExpiresAt,phase:lease.phase,joinAddress:lease.joinAddress};
     });
   }
   async executorReady(grant:ExecutorGrant,actor:CatalogActor,epoch:number,address:string) {
-    return this.mutate(state=>{const lease=this.currentLease(state,grant,epoch),instance=findInstance(state,grant.instanceId),save=findSave(instance,grant.saveId);if(save.room?.desiredState!=="open" || !this.allowedHost(instance,actor,save.id))fail(403,"hosting_forbidden");lease.phase="ready";lease.joinAddress=address;lease.leaseExpiresAt=Date.now()+HOST_LEASE_MS;log(instance,actor,"hosting.ready",save.id);return {joinAddress:address,leaseExpiresAt:lease.leaseExpiresAt};});
+    return this.mutate(state=>{const lease=this.currentLease(state,grant,epoch),instance=findInstance(state,grant.instanceId),save=findSave(instance,grant.saveId);if(save.room?.desiredState!=="open" || !this.allowedHost(instance,actor,save.id))fail(403,"hosting_forbidden");lease.phase="ready";if(lease.handover?.phase==="restoring")lease.handover.phase="completed";lease.joinAddress=address;lease.leaseExpiresAt=Date.now()+HOST_LEASE_MS;log(instance,actor,"hosting.ready",save.id);return {joinAddress:address,leaseExpiresAt:lease.leaseExpiresAt};});
   }
   async commitWorld(grant:ExecutorGrant,epoch:number,checkpoint:WorldCheckpoint) {
     return this.mutate(state=>{const lease=this.currentLease(state,grant,epoch);lease.checkpoint=checkpoint;const instance=findInstance(state,grant.instanceId);log(instance,grant.actor,"hosting.checkpoint",grant.saveId);return checkpoint;});
   }
   async finishExecutor(grant:ExecutorGrant,epoch:number,input:any) {
-    return this.mutate(state=>{const lease=this.currentLease(state,grant,epoch);if(input.clean!==true || !lease.checkpoint || lease.checkpoint.epoch!==epoch || lease.checkpoint.final!==true)fail(409,"final_checkpoint_required");lease.phase="stopped";lease.joinAddress=null;lease.error="";lease.leaseExpiresAt=Date.now();const instance=findInstance(state,grant.instanceId);log(instance,grant.actor,"hosting.finish",grant.saveId);return {stopped:true,checkpoint:lease.checkpoint};});
+    return this.mutate(state=>{const lease=this.currentLease(state,grant,epoch);if(input.clean!==true || !lease.checkpoint || lease.checkpoint.epoch!==epoch || lease.checkpoint.final!==true)fail(409,"final_checkpoint_required");lease.phase="stopped";if(lease.handover&&lease.handover.phase!=="completed"){lease.handover.phase="restoring";lease.handover.checkpointEpoch=epoch;}lease.joinAddress=null;lease.error="";lease.leaseExpiresAt=Date.now();const instance=findInstance(state,grant.instanceId);log(instance,grant.actor,"hosting.finish",grant.saveId);return {stopped:true,checkpoint:lease.checkpoint};});
   }
-  async relayAllowed(grant:ExecutorGrant,epoch:number,actor?:CatalogActor) {
+  async pendingHandover(instanceId:string,saveId:string) {
+    await this.queue;const state=await this.load(),instance=state.instances.find(i=>i.id===instanceId),save=instance?.saves.find(s=>s.id===saveId);
+    const lease=this.hostState(state).leases.find(l=>l.instanceId===instanceId&&l.saveId===saveId);
+    return save?.room?.desiredState==="open" && !!lease?.handover && lease.handover.phase!=="completed";
+  }
+  async relayAllowed(grant:ExecutorGrant,epoch:number,actor?:CatalogActor,allowHandoverDrain=false) {
     const plan=await this.executorPlan(grant,epoch);
     if(grant.nodeId){const node=this.computeNodes(await this.load()).find(n=>n.id===grant.nodeId);if(!node||!node.enabled||!this.nodeAllowed(node,grant.instanceId))return false;}
     if(actor){const instance=(await this.load()).instances.find(i=>i.id===grant.instanceId);if(!instance || !this.allowedHost(instance,actor,grant.saveId))return false;}
-    return plan.lease.leaseExpiresAt>Date.now() && ["starting","ready","checkpointing"].includes(plan.lease.phase) && plan.save.room?.desiredState==="open";
+    const phaseAllowed=["starting","ready","checkpointing"].includes(plan.lease.phase) || allowHandoverDrain && plan.lease.phase==="stopping" && plan.lease.handover?.phase==="saving";
+    return plan.lease.leaseExpiresAt>Date.now() && phaseAllowed && plan.save.room?.desiredState==="open";
   }
 
   private computeNodes(state:CatalogState):ComputeNode[] {const hosting=this.hostState(state);return hosting.nodes??(hosting.nodes=[]);}
@@ -332,11 +370,41 @@ export class NomadCatalog {
   private nodeLoad(state:CatalogState,nodeId:string,excludeGrant?:string){const now=Date.now(),hosting=this.hostState(state);const live=hosting.leases.filter(l=>!["stopped","failed"].includes(l.phase)&&l.leaseExpiresAt+HOST_FENCE_GRACE_MS>now);const grants=hosting.grants.filter(g=>g.nodeId===nodeId&&g.id!==excludeGrant&&(g.expiresAt>now||live.some(l=>l.grantId===g.id)));let memory=0;for(const g of grants){const i=state.instances.find(i=>i.id===g.instanceId),s=i?.saves.find(s=>s.id===g.saveId),r=i?.releases?.find(r=>r.id===s?.releaseId);memory+=(r?.server?.memoryMb??0)+512;}return {tasks:grants.length,memory};}
   private nodeAllowed(node:ComputeNode,instanceId:string){return node.allowAllInstances||node.allowedInstanceIds.includes(instanceId);}
   async computeNode(id:string,token:string){await this.queue;const state=await this.load(),node=this.computeNodes(state).find(n=>n.id===id);if(!node||typeof token!=="string"||!/^[a-f0-9]{64}$/.test(token)||!crypto.timingSafeEqual(Buffer.from(crypto.createHash("sha256").update(token).digest("hex")),Buffer.from(node.tokenHash)))fail(401,"node_authentication_required");return structuredClone(node!);}
-  async listComputeNodes(actor:CatalogActor,instanceId?:string){await this.queue;const state=await this.load();let instance:LogicalInstance|undefined;if(instanceId){instance=findInstance(state,instanceId);if(!permissionsFor(instance,actor).includes("instance.read")&&!instance.saves.some(s=>permissionsFor(instance!,actor,s.id).includes("save.read")))fail(403,"forbidden");}return this.computeNodes(state).filter(n=>actor.admin||n.ownerId===actor.id||!!instance&&this.nodeAllowed(n,instance.id)&&n.kind==="server").map(n=>this.nodeView(state,n));}
+  async listComputeNodes(actor:CatalogActor,instanceId?:string){await this.queue;const state=await this.load();let instance:LogicalInstance|undefined;if(instanceId){instance=findInstance(state,instanceId);if(!permissionsFor(instance,actor).includes("instance.read")&&!instance.saves.some(s=>permissionsFor(instance!,actor,s.id).includes("save.read")))fail(403,"forbidden");}return this.computeNodes(state).filter(n=>actor.admin||n.ownerId===actor.id||!!instance&&this.nodeAllowed(n,instance.id)&&(n.kind==="server"||permissionsFor(instance,actor).includes("room.manage")||instance.saves.some(s=>permissionsFor(instance!,actor,s.id).includes("room.manage")))).map(n=>this.nodeView(state,n));}
   async createComputeNode(actor:CatalogActor,input:unknown){return this.mutate(state=>{const p=object(input),kind=choice(p.kind,["server","player"]);if(kind==="server"&&!actor.admin)fail(403,"forbidden");if(!actor.admin&&p.priority!==undefined&&p.priority!==0)fail(403,"forbidden");if(this.computeNodes(state).filter(n=>n.ownerId===actor.id).length>=50)fail(429,"node_limit");const token=crypto.randomBytes(32).toString("hex");const node:ComputeNode={id:uuid(),name:text(p.name,80,true),kind,ownerId:actor.id,ownerName:actor.name,enabled:true,priority:actor.admin?number(p.priority??0,-100,100):0,memoryBudgetMb:number(p.memoryBudgetMb??4096,512,1048576),reserveMemoryMb:number(p.reserveMemoryMb??512,0,1048576),maxTasks:number(p.maxTasks??1,1,16),allowAllInstances:bool(p.allowAllInstances??true),allowedInstanceIds:array(p.allowedInstanceIds??[],500).map(id=>text(id,64,true)),lastSeenAt:0,metrics:null,lastError:"",tokenHash:crypto.createHash("sha256").update(token).digest("hex")};this.computeNodes(state).push(node);return {node:this.nodeView(state,node),credential:{nodeId:node.id,token}};});}
   async updateComputeNode(actor:CatalogActor,id:string,input:unknown){return this.mutate(state=>{const node=this.computeNodes(state).find(n=>n.id===id);if(!node)fail(404,"node_not_found");if(!actor.admin&&(node!.ownerId!==actor.id||node!.kind==="server"))fail(403,"forbidden");const p=object(input);for(const key of Object.keys(p))if(!["name","enabled","priority","memoryBudgetMb","reserveMemoryMb","maxTasks","allowAllInstances","allowedInstanceIds"].includes(key))fail(400,"invalid_node_config");if(p.name!==undefined)node!.name=text(p.name,80,true);if(p.enabled!==undefined)node!.enabled=bool(p.enabled);if(p.priority!==undefined){if(!actor.admin)fail(403,"forbidden");node!.priority=number(p.priority,-100,100);}if(p.memoryBudgetMb!==undefined)node!.memoryBudgetMb=number(p.memoryBudgetMb,512,1048576);if(p.reserveMemoryMb!==undefined)node!.reserveMemoryMb=number(p.reserveMemoryMb,0,1048576);if(p.maxTasks!==undefined)node!.maxTasks=number(p.maxTasks,1,16);if(p.allowAllInstances!==undefined)node!.allowAllInstances=bool(p.allowAllInstances);if(p.allowedInstanceIds!==undefined)node!.allowedInstanceIds=array(p.allowedInstanceIds,500).map(id=>text(id,64,true));return this.nodeView(state,node!);});}
-  async runtimeSettings(actor:CatalogActor,id:string,saveId:string,input:unknown){return this.mutate(state=>{const instance=findInstance(state,id),save=findSave(instance,saveId);requirePermission(instance,actor,"room.manage",saveId);if(save.room?.desiredState==="open")fail(409,"close_rooms_first");this.requireHostStopped(state,id,saveId);const p=object(input);if(p.placement!==undefined){const q=object(p.placement),mode=choice(q.mode,["manual","fixed","auto","fallback"]),nodeId=q.nodeId?text(q.nodeId,64,true):null;if(mode==="fixed"&&!nodeId)fail(400,"fixed_node_required");if(nodeId){const node=this.computeNodes(state).find(n=>n.id===nodeId);if(!node||!this.nodeAllowed(node,id))fail(403,"node_not_authorized");if(mode==="fallback"&&node!.kind!=="server")fail(400,"server_fallback_required");}save.placement={mode,nodeId};}if(p.ingress!==undefined){if(!actor.admin)fail(403,"forbidden");const ingress=p.ingress===null?undefined:validateIngress(p.ingress);if(ingress&&state.instances.some(i=>i.saves.some(s=>s.id!==saveId&&s.ingress&&s.ingress.bindPort===ingress.bindPort)))fail(409,"network_port_reserved");save.ingress=ingress;}save.updatedAt=Date.now();log(instance,actor,"room.runtime",saveId);return save;});}
-  async dispatchComputeNode(id:string,input:unknown,lookup:(id:string)=>{actor:CatalogActor;willingness:HostingWillingness}|null){return this.mutate(state=>{const node=this.computeNodes(state).find(n=>n.id===id);if(!node)fail(404,"node_not_found");const owner=lookup(node!.ownerId);if(!owner)fail(403,"node_owner_unavailable");const p=object(input),m=object(p.metrics);node!.lastSeenAt=Date.now();node!.metrics={cpuCores:number(m.cpuCores,1,65536),totalMemoryMb:number(m.totalMemoryMb,1,16777216),availableMemoryMb:number(m.availableMemoryMb,0,16777216)};node!.lastError=text(p.lastError??"",500);if(!node!.enabled)return {enabled:false,assignment:null};const now=Date.now(),hosting=this.hostState(state);hosting.grants=hosting.grants.filter(g=>g.expiresAt>now||hosting.leases.some(l=>l.grantId===g.id&&!["stopped","failed"].includes(l.phase)&&l.leaseExpiresAt+HOST_FENCE_GRACE_MS>now));for(const instance of state.instances){for(const save of instance.saves){const policy=save.placement??DEFAULT_PLACEMENT;if(save.room?.desiredState!=="open"||policy.mode==="manual")continue;const lease=hosting.leases.find(l=>l.instanceId===instance.id&&l.saveId===save.id);if(lease&&!["stopped","failed"].includes(lease.phase)&&lease.leaseExpiresAt+HOST_FENCE_GRACE_MS>now)continue;if(hosting.grants.some(g=>g.instanceId===instance.id&&g.saveId===save.id&&g.nodeId&&g.expiresAt>now))continue;const release=instance.releases?.find(r=>r.id===save.releaseId);if(release?.server?.type!=="vanilla"||!release.server.eulaAccepted||!release.serverArtifact)continue;const candidates:Candidate[]=this.computeNodes(state).map(n=>{const who=lookup(n.ownerId),load=this.nodeLoad(state,n.id);return {node:n,willingness:who?.willingness??"none",busyMemoryMb:load.memory,activeTasks:load.tasks,authorized:!!who&&this.nodeAllowed(n,instance.id)&&this.allowedHost(instance,who.actor,save.id)};});const chosen=selectComputeNode(policy,candidates,release.server.memoryMb,now);if(chosen?.id!==id)continue;if(hosting.grants.length>=500)fail(429,"executor_limit");const token=crypto.randomBytes(32).toString("hex"),grant:ExecutorGrant={id:uuid(),tokenHash:crypto.createHash("sha256").update(token).digest("hex"),actor:owner!.actor,instanceId:instance.id,saveId:save.id,nodeName:node!.name,nodeId:node!.id,expiresAt:now+30000};hosting.grants.push(grant);log(instance,owner!.actor,"hosting.scheduled",save.id);return {enabled:true,assignment:{grantId:grant.id,token,instanceId:instance.id,saveId:save.id}};}}return {enabled:true,assignment:null};});}
+  async runtimeSettings(actor:CatalogActor,id:string,saveId:string,input:unknown){
+    return this.mutate(state=>{
+      const instance=findInstance(state,id),save=findSave(instance,saveId);
+      requirePermission(instance,actor,"room.manage",saveId);
+      if(save.room?.desiredState==="open")fail(409,"close_rooms_first");
+      this.requireHostStopped(state,id,saveId);
+      const p=object(input);
+      if(p.placement!==undefined){
+        const q=object(p.placement),mode=choice(q.mode,["manual","fixed","auto","fallback"]),nodeId=q.nodeId?text(q.nodeId,64,true):null;
+        if(mode==="fixed"&&!nodeId)fail(400,"fixed_node_required");
+        if(nodeId){const node=this.computeNodes(state).find(n=>n.id===nodeId);if(!node||!this.nodeAllowed(node,id))fail(403,"node_not_authorized");if(mode==="fallback"&&node!.kind!=="server")fail(400,"server_fallback_required");}
+        save.placement={mode,nodeId};
+      }
+      if(p.ingress!==undefined||p.gateway!==undefined){
+        if(!actor.admin)fail(403,"forbidden");
+        const ingress=p.ingress===undefined?save.ingress:p.ingress===null?undefined:validateIngress(p.ingress);
+        const gateway=p.gateway===undefined?save.gateway:p.gateway===null?{enabled:false,backendPort:save.gateway?.backendPort??25566}:(()=>{const config=object(p.gateway);return{enabled:bool(config.enabled),backendPort:number(config.backendPort,1,65535)};})();
+        if(gateway?.enabled){
+          if(!ingress)fail(400,"gateway_ingress_required");
+          if(gateway.backendPort===ingress!.bindPort)fail(400,"gateway_port_conflict");
+          const release=instance.releases?.find(r=>r.id===save.releaseId)??instance.releases?.slice(-1)[0];
+          const profile=release?.profile??instance.profile;
+          if(!["1.20.1-vanilla","1.21.1-vanilla","1.20.1-fabric","1.20.1-forge","1.21.1-fabric","1.21.1-neoforge"].includes(profile.mcVersion+"-"+profile.loader))fail(409,"gateway_loader_unsupported");
+        }
+        const ports=[...(ingress?[ingress.bindPort]:[]),...(gateway?.enabled?[gateway.backendPort]:[])];
+        if(state.instances.some(i=>i.saves.some(s=>!(i.id===id&&s.id===saveId)&&[s.ingress?.bindPort,...(s.gateway?.enabled?[s.gateway.backendPort]:[])].some(port=>port!==undefined&&ports.includes(port)))))fail(409,"network_port_reserved");
+        save.ingress=ingress;save.gateway=gateway;
+      }
+      save.updatedAt=Date.now();log(instance,actor,"room.runtime",saveId);return save;
+    });
+  }
+  async dispatchComputeNode(id:string,input:unknown,lookup:(id:string)=>{actor:CatalogActor;willingness:HostingWillingness}|null){return this.mutate(state=>{const node=this.computeNodes(state).find(n=>n.id===id);if(!node)fail(404,"node_not_found");const owner=lookup(node!.ownerId);if(!owner)fail(403,"node_owner_unavailable");const p=object(input),m=object(p.metrics);node!.lastSeenAt=Date.now();node!.metrics={cpuCores:number(m.cpuCores,1,65536),totalMemoryMb:number(m.totalMemoryMb,1,16777216),availableMemoryMb:number(m.availableMemoryMb,0,16777216)};node!.lastError=text(p.lastError??"",500);if(!node!.enabled)return {enabled:false,assignment:null};const now=Date.now(),hosting=this.hostState(state);hosting.grants=hosting.grants.filter(g=>g.expiresAt>now||hosting.leases.some(l=>l.grantId===g.id&&!["stopped","failed"].includes(l.phase)&&l.leaseExpiresAt+HOST_FENCE_GRACE_MS>now));for(const instance of state.instances){for(const save of instance.saves){const lease=hosting.leases.find(l=>l.instanceId===instance.id&&l.saveId===save.id);const handover=lease?.handover&&lease.handover.phase!=="completed"?lease.handover:undefined;if(handover&&!this.handoverRestorable(lease!,now))continue;const policy=handover?{mode:"fixed" as const,nodeId:handover.targetNodeId}:save.placement??DEFAULT_PLACEMENT;if(save.room?.desiredState!=="open"||policy.mode==="manual")continue;if(lease&&!["stopped","failed"].includes(lease.phase)&&lease.leaseExpiresAt+HOST_FENCE_GRACE_MS>now)continue;if(hosting.grants.some(g=>g.instanceId===instance.id&&g.saveId===save.id&&g.nodeId&&g.expiresAt>now))continue;const release=instance.releases?.find(r=>r.id===save.releaseId);if(!release?.server || !["vanilla","fabric","forge","neoforge","paper"].includes(release.server.type)||!release.server.eulaAccepted||!release.serverArtifact)continue;const candidates:Candidate[]=this.computeNodes(state).map(n=>{const who=lookup(n.ownerId),load=this.nodeLoad(state,n.id);return {node:n,willingness:who?.willingness??"none",busyMemoryMb:load.memory,activeTasks:load.tasks,authorized:!!who&&this.nodeAllowed(n,instance.id)&&this.allowedHost(instance,who.actor,save.id)};});const chosen=selectComputeNode(policy,candidates,release.server.memoryMb,now);if(chosen?.id!==id)continue;if(hosting.grants.length>=500)fail(429,"executor_limit");const token=crypto.randomBytes(32).toString("hex"),grant:ExecutorGrant={id:uuid(),tokenHash:crypto.createHash("sha256").update(token).digest("hex"),actor:owner!.actor,instanceId:instance.id,saveId:save.id,nodeName:node!.name,nodeId:node!.id,expiresAt:now+30000};hosting.grants.push(grant);log(instance,owner!.actor,"hosting.scheduled",save.id);return {enabled:true,assignment:{grantId:grant.id,token,instanceId:instance.id,saveId:save.id}};}}return {enabled:true,assignment:null};});}
 
   async creators(actor: CatalogActor, ids: unknown, exists: (id: string) => boolean) {
     if (!actor.admin) fail(403, "forbidden");
@@ -383,11 +451,13 @@ export class NomadCatalog {
       requirePermission(instance, actor, "instance.update");
     }
   }
-  async publish(actor: CatalogActor, id: string, release: PublishedRelease) {
+  async publish(actor: CatalogActor, id: string, release: PublishedRelease, expected?: {revision:number;baseReleaseId:string|null}) {
     return this.mutate(state => {
       const instance = findInstance(state, id);
       requirePermission(instance, actor, "mods.manage");
       requirePermission(instance, actor, "instance.update");
+      const existing=instance.releases?.find(r=>r.id===release.id);if(existing){if(existing.manifestDigest!==release.manifestDigest)fail(409,'release_identity_conflict');return existing;}
+      if(expected&&(instance.revision!==expected.revision||(instance.releases?.slice(-1)[0]?.id??null)!==expected.baseReleaseId))fail(409,'publication_base_conflict');
       const p = release.profile, base = instance.profile;
       if (instance.saves.length && (p.mcVersion !== base.mcVersion || p.loader !== base.loader)) fail(409, "version_locked");
       if ((instance.releases?.length ?? 0) >= 100) fail(409, "release_limit");

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "clientMappings": [
+    {
+      "minecraft": "1.20.1",
+      "url": "https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt",
+      "sha1": "6c48521eed01fe2e8ecdadbd5ae348415f3c47da"
+    },
+    {
+      "minecraft": "1.21.1",
+      "url": "https://piston-data.mojang.com/v1/objects/2244b6f072256667bcd9a73df124d6c58de77992/client.txt",
+      "sha1": "2244b6f072256667bcd9a73df124d6c58de77992"
+    }
+  ],
+  "forgeMergedMappings": {
+    "source": "de.oceanlabs.mcp:mcp_config:1.20.1-20230612.114412",
+    "sha256": "ea4366a7c3ddf9e1857a3edb1d81887d44efd7c5c0c3d1e321fc85feead857f4"
+  },
+  "methods": [
+    "Minecraft.getInstance()",
+    "Minecraft.getConnection()",
+    "ClientPacketListener.sendCommand(String)"
+  ],
+  "scope": "Commands use the current client connection. No server identity or bot identity is substituted."
+}

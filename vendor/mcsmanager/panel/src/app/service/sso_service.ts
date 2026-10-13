@@ -219,7 +219,7 @@ async function oauth2TokenExchange(
     throw new Error(`OAuth 2.0 token exchange failed: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as Record<string,unknown>;
   const accessToken = data.access_token;
   if (!accessToken) {
     throw new Error("OAuth 2.0 token response missing access_token");

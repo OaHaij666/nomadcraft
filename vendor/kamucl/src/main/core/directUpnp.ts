@@ -41,7 +41,7 @@ export function parseGatewayServices(xml: string, location: string): Array<Pick<
 export const localRequest: Transport = (input, options = {}) => {
   const url = localRouterUrl(input)
   return new Promise((resolve, reject) => {
-    const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000)
+    const signal = options.signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([options.signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000)
     const req = http.request(url, {
       method: options.body ? 'POST' : 'GET', signal,
       headers: options.body ? { 'Content-Type': 'text/xml; charset="utf-8"', SOAPAction: `"${options.action}"`, 'Content-Length': Buffer.byteLength(options.body) } : {}

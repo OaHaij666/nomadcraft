@@ -1,5 +1,0 @@
-- [x] Research protocol gateway, session preservation, handover and trust limits; record primary sources and distinguish planned migration from delivered functionality
-- [x] Persist self-owned willingness and expose validated authenticated API — panel npm test
-- [x] Add personal settings and account dialog control with four options — frontend type-check and npm test
-- [x] Verify default, invalid values, identity isolation and restart persistence — panel authenticated HTTP test and frontend npm test
-- [x] Run frontend/backend checks and update runnable preview — panel 87, frontend 70, common 9 and daemon 144 tests; nine HTTP integration groups; actual browser save/reload/mobile checks; builds and lint

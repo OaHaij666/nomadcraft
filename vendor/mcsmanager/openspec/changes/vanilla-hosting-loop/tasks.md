@@ -1,7 +1,0 @@
-- [x] Add private scoped tickets, persisted fenced leases and public room status
-- [x] Add authorized deployment and validated immutable world checkpoint APIs
-- [x] Add authenticated outbound relay with readiness and stop fencing
-- [x] Implement Rust panel executor deploy/restore/process/checkpoint/final upload
-- [x] Connect KAMUCL hosting controls and catalog room status
-- [x] Prove real Java start, connection, save return and second-host restore
-- [x] Run relevant unit, HTTP, process and UI checks; preserve a runnable preview

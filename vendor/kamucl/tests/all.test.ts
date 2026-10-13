@@ -250,3 +250,13 @@ import './ysm-preview.test'
 import './character-ysm-install.test'
 
 import './cloud-resource-policy.test'
+
+import './cloud-sync-files.test'
+
+import './cloud-prepare-plan.test'
+
+import './player-bridge-targets.test'
+
+import './cloud-instance-files.test'
+
+import './numen-local-roster.test'

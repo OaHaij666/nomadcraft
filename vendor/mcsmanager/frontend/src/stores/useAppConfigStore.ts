@@ -11,7 +11,7 @@ export const useAppConfigStore = createGlobalState(() => {
 
   // Shared tokens for both themes. The palette lives in assets/nomad-theme.scss;
   // these values mirror it so Ant's components agree with our own CSS instead of
-  // fighting it. See docs/前端设计语言-v1.md.
+  // fighting it. See docs/design/前端设计语言-v1.md.
   const sharedTokens = {
     fontFamily: '"IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif',
     fontFamilyCode: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace',

@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),{verifyTcpRetention}=require('./tcp-retention.cjs');
+function fixture(samples,closed=false){let reads=0,waits=0;return {args:{expected:'original',read:async()=>samples[reads++]??undefined,frontendClosed:async()=>closed,wait:async()=>{waits++}},counts:()=>({reads,waits})}}
+test('stable original socket is accepted without unnecessary retry',async()=>{const f=fixture(['original']);assert.equal(await verifyTcpRetention(f.args),'original');assert.deepEqual(f.counts(),{reads:1,waits:0})});
+test('one incomplete OS observation does not replace the original connection identity',async()=>{const f=fixture([undefined,'original']);assert.equal(await verifyTcpRetention(f.args),'original');assert.deepEqual(f.counts(),{reads:2,waits:1})});
+test('confirmed absence or a different socket never satisfies retention',async()=>{for(const values of [[undefined,undefined,undefined],['new','new','new']]){const f=fixture(values);await assert.rejects(verifyTcpRetention(f.args),/confirmed OS snapshots/)}});
+test('a real gateway frontend disconnect rejects even if an identical tuple reappears',async()=>{const f=fixture(['original'],true);await assert.rejects(verifyTcpRetention(f.args),/actual player frontend disconnect/);assert.equal(f.counts().reads,0)});

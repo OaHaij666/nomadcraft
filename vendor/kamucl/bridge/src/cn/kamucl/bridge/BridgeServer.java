@@ -38,6 +38,12 @@ public final class BridgeServer {
         server.createContext("/kamucl/v1/ping", exchange -> respond(exchange, null, () -> Map.of("ok", true, "protocol", PROTOCOL)));
         server.createContext("/kamucl/v1/manifest", exchange -> respond(exchange, null, BridgeServer::manifest));
         server.createContext("/kamucl/v1/set", exchange -> respond(exchange, token, () -> setParam(exchange)));
+        server.createContext("/kamucl/v1/player-command", exchange -> respond(exchange, token, () -> {
+            if(!"POST".equals(exchange.getRequestMethod()))throw new IOException("POST required");
+            Object command=readJson(exchange).get("command");
+            if(!(command instanceof String))throw new IOException("Missing command");
+            try{return PlayerCommands.send((String)command);}catch(Exception e){throw new IOException(e.getMessage(),e);}
+        }));
         server.createContext("/kamucl/v1/reset", exchange -> respond(exchange, token, () -> resetParam(exchange)));
         // HttpServer's dispatcher inherits daemon status from the thread calling
         // start(). Starting on Fabric's render thread kept the JVM alive after

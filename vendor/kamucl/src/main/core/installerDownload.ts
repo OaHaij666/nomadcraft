@@ -11,7 +11,7 @@ export async function downloadLoaderInstaller(url: string, dest: string, mirror:
   for (const source of candidates) {
     await waitIfTaskPaused(signal)
     signal?.throwIfAborted()
-    const timeout = AbortSignal.timeout(4000), requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+    const timeout = AbortSignal.timeout(4000), requestSignal = signal ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, timeout]) : timeout
     const read = async (checksum: boolean) => {
       const release = await downloadLimiter.acquire(requestSignal)
       try {

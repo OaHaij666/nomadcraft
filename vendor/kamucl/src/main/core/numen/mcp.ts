@@ -33,7 +33,7 @@ export class NumenMcpClient {
   constructor(readonly endpoint: string, private token: string, private transport: typeof fetch = fetch) { localMcpEndpoint(endpoint) }
   private async rpc(method: string, params: unknown, signal?: AbortSignal, timeout = 15000): Promise<any> {
     const id = ++this.nextId
-    const response = await this.transport(this.endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...(this.token ? { Authorization: 'Bearer ' + this.token } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) })
+    const response = await this.transport(this.endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...(this.token ? { Authorization: 'Bearer ' + this.token } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }), signal: signal ? (AbortSignal as typeof AbortSignal & {any(signals:AbortSignal[]):AbortSignal}).any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) })
     if (!response.ok) { await response.body?.cancel(); throw new Error(response.status === 401 || response.status === 403 ? 'Numen 令牌不正确，请重新读取游戏配置' : 'Numen MCP 请求失败（HTTP ' + response.status + '）') }
     const text = await boundedText(response)
     let body: any
@@ -50,7 +50,7 @@ export class NumenMcpClient {
     const result = await this.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'KAMUCL NC / Numen Harness', version: '0.1.0' } }, signal)
     if (result?.serverInfo?.name !== 'numen-mcp') throw new Error('此端点不是 Numen MCP 服务')
     this.instructions = String(result.instructions ?? '')
-    const response = await this.transport(this.endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: 'Bearer ' + this.token } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) })
+    const response = await this.transport(this.endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: 'Bearer ' + this.token } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }), signal: signal ? (AbortSignal as typeof AbortSignal & {any(signals:AbortSignal[]):AbortSignal}).any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) })
     await response.body?.cancel()
     if (!response.ok) throw new Error('Numen MCP 握手通知失败')
     const listed = await this.rpc('tools/list', {}, signal)

@@ -1,5 +1,5 @@
 import type { CloudSyncState } from './types'
-export interface NomadStatus { address: string; connected: boolean; signedIn: boolean; username?: string }
+export interface NomadStatus { serviceId?: string; address: string; connected: boolean; signedIn: boolean; username?: string }
 export type NomadPermission =
   | 'instance.read'
   | 'instance.update'
@@ -11,15 +11,21 @@ export type NomadPermission =
   | 'members.manage'
   | 'mods.manage'
   | 'players.manage'
+  | 'bots.private.create'
+  | 'bots.shared.create'
+  | 'bots.manage'
+  | 'bots.approve'
+  | 'models.approve'
 export interface NomadCatalogProfile { mcVersion?: string; loader?: string; loaderVersion?: string; packName?: string; packRevision?: string }
 export interface NomadCatalogSync { state?: CloudSyncState; localRevision?: number; cloudRevision?: number; message?: string }
-export interface NomadCatalogSave { id: string; name: string; description?: string; rules?: Record<string, unknown>; players?: Array<Record<string, unknown>>; room?: { id?: string; name?: string; desiredState?: 'open' | 'closed'; createdAt?: number } | null; hosting?: { joinAddress?: string | null; phase?: string; nodeName?: string } | null; hostingAllowed?: boolean; sync?: NomadCatalogSync }
+export interface NomadCatalogSave { releaseId?:string|null; id: string; name: string; description?: string; rules?: Record<string, unknown>; players?: Array<Record<string, unknown>>; room?: { id?: string; name?: string; desiredState?: 'open' | 'closed'; createdAt?: number } | null; hosting?: { joinAddress?: string | null; phase?: string; nodeName?: string } | null; hostingAllowed?: boolean; sync?: NomadCatalogSync }
 export interface NomadCatalogInstance {
   id: string
   name: string
   description?: string
   ownerId?: string
   ownerName?: string
+  releases?: Array<{id:string;manifest?:import('../../../mcsmanager/shared/nomad-distribution').DistributionManifest;manifestDigest?:string;profile:NomadCatalogProfile}>
   profile?: NomadCatalogProfile
   saves?: NomadCatalogSave[]
   permissions?: NomadPermission[]

@@ -45,10 +45,13 @@ describe("authenticated hosting HTTP lifecycle",()=>{
   expect((await upload(await zip({"world/level.dat":Buffer.from("level"),"ops.json":Buffer.from("[]")}))).status).toBe(400);
  });
  it("authenticates tunnels, closes them on revoked hosting, and blocks room reopen during shutdown",async()=>{
-  expect((await agent("ready",{})).status).toBe(200);
+  expect((await agent("relay",{})).status).toBe(200);
+  const premature=await agent("ready",{});expect(premature.status).toBe(409);expect(await premature.response.text()).toContain("hosting_tunnel_not_ready");
+  const before=(await call("GET","/nomad/catalog/",undefined,admin)).data.instances.find((i:any)=>i.id===instanceId).saves.find((s:any)=>s.id===saveId);expect(before.hosting.joinAddress).toBeNull();
   const url=base.replace("http:","ws:")+"/api/nomad/hosting/agent/"+ticket.grantId+"/tunnel";
   await new Promise<void>((resolve,reject)=>{const bad=new WebSocket(url,{headers:{Authorization:"Bearer "+"b".repeat(64),"X-Nomad-Epoch":String(epoch)}});bad.on("open",()=>{bad.terminate();reject(new Error("Invalid tunnel accepted"));});bad.on("unexpected-response",(_request,response)=>{expect(response.statusCode).toBe(403);response.resume();bad.terminate();resolve();});bad.on("error",()=>{});});
   const socket=new WebSocket(url,{headers:{Authorization:"Bearer "+ticket.token,"X-Nomad-Epoch":String(epoch)}});await new Promise<void>((r,j)=>{socket.on("open",r);socket.on("error",j);});const closed=new Promise<void>(r=>socket.once("close",()=>r()));
+  const ready=await agent("ready",{});expect(ready.status).toBe(200);expect(ready.data.joinAddress).toMatch(/^127\.0\.0\.1:\d+$/);
   await call("PUT","/nomad/catalog/instances/"+instanceId+"/grants",{grants:[]},admin);expect((await agent("heartbeat",{phase:"ready"})).data.stop).toBe(true);await closed;
   await call("PUT",room(),{name:"HTTP room",desiredState:"closed"},admin);expect((await call("PUT",room(),{name:"HTTP room",desiredState:"open"},admin)).status).toBe(409);
   expect((await upload(await zip({"world/level.dat":Buffer.from("final")}),true)).status).toBe(200);expect((await agent("finish",{clean:true})).status).toBe(200);expect((await agent("heartbeat",{phase:"ready"})).status).toBe(401);

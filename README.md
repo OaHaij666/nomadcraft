@@ -1,139 +1,62 @@
-# NomadCraft
+# NomadCraft / KAMUCL NC
 
-**A Minecraft world that lives between friends.**
+面向朋友联机的 Minecraft 项目。KAMUCL NC 是桌面客户端；NomadCraft 后端负责实例、账号权限、计算节点、网络入口和已提交的存档。游戏服务端运行在玩家电脑或服务器计算节点上。
 
-Fixed address. Always-on saves. Whoever is online shares the load. Nobody rents a
-server, nobody port-forwards, nobody keeps their PC awake so others can play.
+目前已验证原版托管、正常停服回传与恢复、云端实例文件发布和同步、环境跨云推送。Forge / Fabric / NeoForge 托管和客户端自动准备仍在开发；更换计算者不断线尚未实现。实现与验收记录保存在本地 docs/implementation/，不上传 GitHub。
 
-> 一个"跑在朋友之间"的 Minecraft 世界：地址不变、存档不断、机器轮着用、没人时自己睡觉。
+## 项目目录
 
-## Friends-first product scope
+| 目录 | 内容 |
+| --- | --- |
+| `apps/` | Rust 执行器、控制面原型、转发与快照命令行工具 |
+| `crates/` | Rust 协议、Minecraft 协议及存档同步公共库 |
+| `vendor/kamucl/` | KAMUCL NC 桌面客户端源码 |
+| `vendor/mcsmanager/` | NomadCraft 后端及内置云端管理界面源码 |
+| `vendor/minecraft-numen/` | AI 陪玩基础项目源码 |
+| `scripts/dev/` | 本地开发启动入口 |
+| `scripts/verify/` | 跨模块、真实进程和界面验收脚本 |
+| `docs/` | 仅本地保存的产品、设计、实现、研究和验证记录（不提交） |
+| `.nomad/` | 不提交 Git 的本地配置、缓存、诊断日志及备份 |
+| `target/` | Cargo 自动生成的构建缓存 |
 
-NomadCraft is for a trusted group of friends. It does not attempt anti-cheat or adversarial verification of the computer running Minecraft. The center manages access, placement and committed room state; the selected node runs the actual game server. Normal handover saves and stops the old server, commits its complete persistent state, then restores it on the next node. Session-preserving migration is a later enhancement.
+本地文档索引位于 docs/README.md，目录约定位于 docs/project-layout.md；docs/ 不纳入 Git。源码树保持原构建路径；不要把运行数据或临时截图放在根目录。
 
-Package checks protect download integrity and repair missing/corrupt components; local resources and normal configuration/runtime changes are not cheating. Management authentication and single-writer leases remain necessary for ordinary administration and preventing conflicting saves. See [current product scope](docs/产品愿景.md) and [local data design](docs/本地扩展与运行数据-同步设计.md). This scope is confirmed; relaxed launcher checks and full mod-data migration are still pending implementation.
+## 本地开发
 
-## KAMUCL NomadCraft desktop client
+在各子项目中安装依赖后，从项目根目录执行：
 
-KAMUCL NC is now the official desktop client for NomadCraft. Its Electron/Vue/TypeScript renderer is the user-facing client; its main process keeps Microsoft accounts, Java, Minecraft files, local networking tools and the local agent on the player machine. NomadCraft servers provide the authenticated control plane, catalog, permissions, compute scheduling, ingress and committed room state. The first Nomad view already connects to a configured backend, logs in with an in-memory session and reads authorized instances.
-
-## The idea
-
-Normally a Minecraft server is tied to one machine: either someone rents a box and
-pays for it to idle most of the day, or one friend hosts and the session dies the
-moment they close their laptop.
-
-NomadCraft inverts that. The world belongs to the group, not to whichever PC
-happens to be running it:
-
-- **The public node can coordinate without running the game.** It knows who is
-  hosting, hands out short-lived leases, and forwards bytes. A capable server can
-  also run Minecraft as a fixed, scheduled or fallback compute node.
-- **The world runs on a player's machine.** Whichever friend is online and best
-  suited runs the real server, so big modpacks use the players' hardware.
-- **Leaving hands over, it does not end.** When the host quits, the control plane
-  elects someone else, moves the latest save across, and players reconnect to the
-  same address.
-- **Nobody playing means nothing running.** The world sleeps until the next player
-  wakes it.
-
-## Status: original Rust MVP is end-to-end
-
-The section below describes the original Rust prototype. The panel-backed agent
-now also launches real vanilla Minecraft and supports persistent compute nodes;
-see [current implementation](docs/计算节点与网络自检-实现.md).
-
-All three components exist and are wired together. The full path works today:
-register a machine, elect a host, upload a world as a checkpoint, and let another
-machine pull it back and reconstruct the world byte-for-byte.
-
-| Component | Status | What it does |
-| --- | --- | --- |
-| `nomad-proto` | done | shared types: ids, epochs, leases, manifests, control messages |
-| `nomad-snapshot` | done | content-addressed snapshots, incremental replication, retention |
-| `nomad-control-plane` | done | lease engine, scheduler, durable state, HTTP API, world store |
-| `nomad-relay` | done | fixed front door: pairs players with a host's outbound tunnel |
-| `nomad-agent` | MVP | registers, claims/releases leases, supervises the server, guards the world |
-
-**86 tests pass**, clippy is clean with `-D warnings`, and an end-to-end smoke
-test drives the real binaries. What is deliberately **not** wired yet: launching an
-actual `server.jar` process (the agent's supervisor models the lifecycle but does
-not spawn Java), and multiplexing many rooms through one relay address.
-
-## Design pillars
-
-1. **One host at a time, enforced by leases.** Every handover bumps a monotonic
-   *epoch*. Reports stamped with an older epoch are rejected and a host that learns
-   a newer epoch exists must stop immediately. Serving a stale world is always worse
-   than briefly serving none.
-2. **The public node can be tiny.** It coordinates and forwards; it never parses
-   Minecraft and never stores world logic.
-3. **Worlds are content-addressed.** A snapshot's identity is the BLAKE3 digest of
-   its manifest, so manifests are immutable and every chunk is verified on read.
-   Splitting is content-defined, so a small edit only uploads the chunks around it.
-4. **Durable by default.** A running host periodically pushes the latest save and
-   only the changed chunks cross the wire. Retention keeps a recent good version, a
-   nightly history, and every manual checkpoint, so a crash costs minutes, not a
-   world.
-5. **Peers connect outbound.** Machines dial out and hold a connection open, so NAT
-   and the absence of a public IP are non-issues.
-
-## Try it
-
-Requires a recent stable Rust toolchain.
-
-```sh
-cargo build
-cargo test                      # the full suite
-
-# start a control plane
-cargo run -p nomad-control-plane -- serve --bind 127.0.0.1:8787 \
-    --data-dir .nomad/control-plane
-
-# in another shell, register this machine and ask to host
-cargo run -p nomad-agent -- register --control-plane http://127.0.0.1:8787 --name my-pc
-cargo run -p nomad-agent -- host --control-plane http://127.0.0.1:8787 --server srv_...
+```powershell
+npm --prefix vendor/mcsmanager/panel run dev
+npm --prefix vendor/mcsmanager/frontend run dev
+npm --prefix vendor/kamucl run dev
 ```
 
-On Windows, `pwsh scripts/smoke.ps1` runs the whole flow against the built binaries.
+构建客户端（先构建内置云端界面）：
 
-## Repository layout
-
-```text
-crates/
-  nomad-proto/        shared wire types (no I/O)
-  nomad-snapshot/     content-addressed world snapshots, replication, retention
-apps/
-  control-plane/      leases, scheduling, HTTP API, world store
-  agent/              local server supervision + world sync
-  relay/              stateless byte forwarding for game traffic
-docs/                 product vision and technical research
-scripts/              end-to-end smoke test
+```powershell
+npm --prefix vendor/mcsmanager/frontend run build
+npm --prefix vendor/kamucl run build
+node vendor/kamucl/node_modules/electron/cli.js scripts/dev/start-client.cjs
 ```
 
-## API at a glance
+这个客户端入口使用 `.nomad/runtime/desktop/` 中的开发配置，保留已有账号配置、角色卡、模型和游戏文件。后端原有数据仍在 `vendor/mcsmanager/panel/data/` 与 `daemon/data/`，没有迁移或清空。
 
-```text
-POST /v1/nodes/register               register a machine
-GET  /v1/nodes                        list machines
-POST /v1/servers                      create a server in a room
-GET  /v1/servers/{id}                 current host, epoch, committed save
-POST /v1/servers/{id}/claim           elect a host
-POST /v1/servers/{id}/release         hand hosting over
-POST /v1/servers/{id}/renew           keep a lease alive
-POST /v1/servers/{id}/checkpoint      commit a save
-PUT  /v1/snapshots/{id}/manifest      upload a manifest
-PUT  /v1/snapshots/{id}/chunks/{hash} upload a chunk
-GET  /v1/snapshots/{id}/chunks/{hash} download a chunk
+## 验证
+
+```powershell
+node scripts/verify/workspace-layout.cjs
+npm --prefix vendor/mcsmanager/panel test
+npm --prefix vendor/mcsmanager/frontend test
+cargo test -p nomad-agent
+node scripts/verify/instance-distribution.mjs
 ```
 
-## Documentation
+Electron / 浏览器验收脚本使用 Playwright；可通过 `NC_PLAYWRIGHT_MODULE` 指定已安装的模块路径。完整入口见 [验证脚本说明](scripts/README.md)。不要递增客户端版本或发布安装包来代替验证。
 
-- [docs/产品愿景.md](docs/产品愿景.md) — what this is, in plain language
-- [docs/技术研究-v1.0.md](docs/技术研究-v1.0.md) — how the pieces fit together
-- [docs/现有轮子调研-v1.0.md](docs/现有轮子调研-v1.0.md) — build-on vs. build-new
-- [docs/需求分析-v0.1.md](docs/需求分析-v0.1.md) — the original requirements
+## 产品与许可
 
-## License
+产品和同步设计文档仅保存在本地 docs/，不上传 GitHub。
 
-MIT. See [LICENSE](LICENSE).
+- [贡献说明](CONTRIBUTING.md)
+
+根项目采用 MIT；各基础项目及第三方代码保留自己的许可，见对应源码目录。

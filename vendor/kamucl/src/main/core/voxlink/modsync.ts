@@ -41,7 +41,7 @@ export async function modrinthRequest(route: string, signal: AbortSignal, body?:
     let retry = attempt === 0 ? 1000 : 3000
     try {
       const response = await fetch(`https://api.modrinth.com/v2${route}`, {
-        method: body === undefined ? 'GET' : 'POST', signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        method: body === undefined ? 'GET' : 'POST', signal: (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([signal, AbortSignal.timeout(15000)]),
         headers: { 'User-Agent': `KAMUCL-App/${APP_VERSION}`, 'Content-Type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) })
       })

@@ -143,7 +143,7 @@ routerApp.on("file/status", async (ctx, data) => {
       downloadTasks,
       platform: os.platform(),
       isGlobalInstance: data.instanceUuid === GLOBAL_INSTANCE_UUID_KEY,
-      disks: getWindowsDisks()
+      disks: await getWindowsDisks()
     });
   } catch (error: any) {
     protocol.responseError(ctx, error);

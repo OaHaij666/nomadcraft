@@ -13,7 +13,7 @@ export interface DiagnosticFinding {
 }
 export interface InstanceOverview {
   target: InstanceTarget; directory: string; shared: boolean; name: string
-  mcVersion: string; loader?: string; running: boolean; roots: string[]
+  mcVersion: string; loader?: string; loaderVersion?: string; running: boolean; roots: string[]
 }
 export interface InstanceOperation {
   kind: 'backup' | 'clone' | 'restore' | 'worldExport' | 'repair'

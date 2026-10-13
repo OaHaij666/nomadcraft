@@ -13,7 +13,16 @@ interface AppStateInfo extends PanelStatus {
 export const useAppStateStore = createGlobalState(() => {
   const { execute: reqUserInfo } = userInfoApi();
 
-  const language = useLocalStorage(LANGUAGE_KEY, toStandardLang(window.navigator.language));
+  const embeddedDesktop = window.location.protocol === "kamucl-panel:";
+  // Migrate the browser-derived English preference in existing desktop profiles once.
+  if (embeddedDesktop && localStorage.getItem("NOMAD_DESKTOP_LANGUAGE_V1") !== "zh_cn") {
+    localStorage.setItem(LANGUAGE_KEY, "zh_cn");
+    localStorage.setItem("NOMAD_DESKTOP_LANGUAGE_V1", "zh_cn");
+  }
+  const language = useLocalStorage(
+    LANGUAGE_KEY,
+    embeddedDesktop ? "zh_cn" : toStandardLang(window.navigator.language)
+  );
   const state: AppStateInfo = reactive<AppStateInfo>({
     userInfo: null,
     isInstall: true,
@@ -73,7 +82,7 @@ export const useAppStateStore = createGlobalState(() => {
     if (panelStatusRes.value?.settings) {
       state.settings = { ...state.settings, ...panelStatusRes.value.settings };
     }
-    if (state.isInstall) {
+    if (state.isInstall && !embeddedDesktop) {
       state.language = language.value = toStandardLang(panelStatusRes.value?.language);
     }
     console.info("Window.navigator.language:", window.navigator.language);

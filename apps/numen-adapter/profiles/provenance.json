@@ -1,0 +1,27 @@
+[
+  {
+    "file": "1.20.1-intermediary.jar",
+    "source": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.20.1/intermediary-1.20.1-v2.jar",
+    "sha256": "26b60a7dac40e19609cdf095f7124a79ea426d8a84344bc8883c7210f0294799"
+  },
+  {
+    "file": "1.20.1-mojang.txt",
+    "source": "Mojang version manifest: server_mappings",
+    "sha256": "dca153d20defb32cfac3f069c3bf77b3e13c30ae63847637479d3137e099bb72"
+  },
+  {
+    "file": "1.21.1-intermediary.jar",
+    "source": "https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.1/intermediary-1.21.1-v2.jar",
+    "sha256": "e8bd6a4c39e235ee2dc73063558610775c72a2572fa0c6b32915b149074012a6"
+  },
+  {
+    "file": "1.21.1-mojang.txt",
+    "source": "Mojang version manifest: server_mappings",
+    "sha256": "9d0b04bead421c8229aff14b534432bbc927bea642e7c8593d1276b8df8ba53f"
+  },
+  {
+    "file": "1.20.1-mcp.zip",
+    "source": "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/1.20.1/mcp_config-1.20.1.zip",
+    "sha256": "f46d1050d8bed9046886b90a0d2fb80b4c6b5120fc35d32e5d37498dbe0a6d2a"
+  }
+]

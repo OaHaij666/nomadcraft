@@ -1,0 +1,14 @@
+{
+  "rooms": [
+    {
+      "instanceId": "replace-with-cloud-instance-id",
+      "saveId": "replace-with-cloud-save-id",
+      "bindHost": "0.0.0.0",
+      "port": 25565,
+      "publicHost": "friends.example.com",
+      "publicPort": 25565,
+      "backendPort": 25566,
+      "hostname": "friends.example.com"
+    }
+  ]
+}

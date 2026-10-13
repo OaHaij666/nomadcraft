@@ -1,0 +1,3 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');const {localProxyPort}=require('./remote-compute.cjs');
+test('explicit loopback download proxy can be shared with the isolated SSH node',()=>{assert.equal(localProxyPort('http://127.0.0.1:7897'),7897);assert.equal(localProxyPort('http://localhost'),80);assert.equal(localProxyPort(''),undefined)});
+test('diagnostic proxy rejects credentials and unexpected remote/path components',()=>{for(const url of ['https://127.0.0.1:7897','http://example.com:7897','http://user:password@127.0.0.1:7897','http://127.0.0.1:7897/private','http://127.0.0.1:7897/?token=secret','http://127.0.0.1:7897/#secret'])assert.throws(()=>localProxyPort(url))});

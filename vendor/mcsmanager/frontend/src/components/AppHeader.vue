@@ -8,6 +8,8 @@ import { computed, h } from "vue";
 import { useRoute } from "vue-router";
 import CardPanel from "./CardPanel.vue";
 
+const embeddedDesktop=window.location.protocol==='kamucl-panel:';
+const openOperations=()=>window.parent.postMessage({type:'nomad-open-operations'},'*');
 const route = useRoute();
 const { containerState } = useLayoutContainerStore();
 
@@ -60,6 +62,7 @@ const openPhoneMenu = (b = false) => {
         </div>
       </nav>
       <div class="btns">
+        <button v-if="embeddedDesktop" class="nav-button right-nav-button desktop-operation-button" @click="openOperations">{{ $t('TXT_CODE_nomad_sync_hosting') }}</button>
         <div v-for="(item, index) in appMenus as any" :key="index">
           <a-dropdown v-if="item.menus && item.conditions" placement="bottom">
             <div
@@ -170,6 +173,7 @@ const openPhoneMenu = (b = false) => {
 </template>
 
 <style lang="scss" scoped>
+.desktop-operation-button{background:transparent;border:0;color:inherit;font:inherit;}
 @import "@/assets/global.scss";
 
 .nav-button-warning:hover {

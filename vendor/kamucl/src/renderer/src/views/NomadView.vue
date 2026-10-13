@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { addFolder, getInstalled, getSettings, nomadCatalog, nomadConnect, nomadCreateOfficial, nomadCreateSave, nomadLogin, nomadLogout, nomadRoom, nomadStatus, selectDir } from '../api'
-import type { NomadCatalog, NomadCatalogInstance, NomadCatalogSave, NomadPermission, NomadStatus } from '../api'
+import type { NomadCatalog, NomadCatalogInstance, NomadPermission, NomadStatus } from '../api'
+import type { NomadCatalogSave } from '@shared/nomad'
 import type { InstalledVersion } from '@shared/types'
 import { cloudSyncText, cloudSyncTone, refreshCloudInstances, setCloudInstanceBinding, store, toast } from '../store'
 import type { CloudInstalledVersion } from '../store'

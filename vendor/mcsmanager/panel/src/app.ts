@@ -172,6 +172,7 @@ _  /  / / / /___  ____/ /_  /  / / / /_/ /_  / / / /_/ /_  /_/ //  __/  /
       }
     });
   app.use(async (ctx, next) => {
+    if(ctx.method==='PUT'&&/\/nomad\/distribution\/(?:publications|receive)\/[^/]+\/blobs\/[a-f0-9]{64}$/.test(ctx.path))return next();
     const policy = ctx.state.nomadUploadPolicy;
     if (!policy) return standardBody(ctx, next);
     try {

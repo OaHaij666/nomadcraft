@@ -133,7 +133,7 @@ const navItems: Array<{ key: ViewName; label: string; icon: string }> = [
   },
   {
     key: 'game',
-    label: '游戏版本',
+    label: '游戏实例',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5.5"/><path d="M7.5 10.8v3.4M5.8 12.5h3.4"/><circle cx="15.6" cy="11.9" r="0.6" fill="currentColor" stroke="none"/><circle cx="18" cy="13.6" r="0.6" fill="currentColor" stroke="none"/></svg>'
   },
   {

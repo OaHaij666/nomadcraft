@@ -35,7 +35,7 @@ export function harnessTools(tools: NumenTool[]): NumenTool[] {
     const schema = structuredClone(tool.inputSchema)
     const properties = schema.properties as Record<string, unknown> | undefined
     if (properties) delete properties.companion
-    if (Array.isArray(schema.required)) schema.required = schema.required.filter(key => key !== 'companion')
+    if (Array.isArray(schema.required)) schema.required = schema.required.filter((key:unknown) => key !== 'companion')
     return { ...tool, inputSchema: schema }
   })
 }
@@ -66,7 +66,7 @@ export class NumenHarness {
   private poller: Promise<void> | undefined
   private stopped = false
   readonly history: BrainMessage[]
-  constructor(private mcp: NumenMcpClient, private model: Pick<AiModelClient, 'call'>, private companion: string, private settings: AiSettings, private host: HarnessHost, history: BrainMessage[] = [], private character?: CharacterCard) { this.history = settleHistory(history) }
+  constructor(private mcp: Pick<NumenMcpClient, 'tools' | 'instructions' | 'call'>, private model: Pick<AiModelClient, 'call'>, private companion: string, private settings: AiSettings, private host: HarnessHost, history: BrainMessage[] = [], private character?: CharacterCard) { this.history = settleHistory(history) }
   start(): void {
     if (this.running) throw new Error('该同伴的 AI 已在运行')
     this.host.log('system', '启动器 Harness 已接管；等待任务或游戏内消息。')

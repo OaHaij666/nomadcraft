@@ -330,7 +330,7 @@ export function syncFromServersDat(versionId?: string, folder?: string): ServerS
       continue
     }
     for (const datServer of read.list) {
-      let parsed
+      let parsed: ReturnType<typeof parseServerAddress>
       try {
         parsed = parseServerAddress(datServer.ip)
       } catch (error) {
@@ -497,7 +497,7 @@ export function pingServer(address: string): Promise<ServerPingResult> {
       version: '-',
       latencyMs: 0
     }
-    let parsed
+    let parsed: ReturnType<typeof parseServerAddress>
     try {
       parsed = parseServerAddress(address)
     } catch {

@@ -105,7 +105,7 @@ function toReleaseInfo(j: GhRelease): ReleaseInfo | null {
 }
 
 function updateRequestDeadline(parent?: AbortSignal, timeoutMs = API_TIMEOUT_MS): { signal: AbortSignal; finish: () => void } {
-  const controller = new AbortController(), signal = parent ? AbortSignal.any([parent, controller.signal]) : controller.signal
+  const controller = new AbortController(), signal = parent ? (AbortSignal as typeof AbortSignal & { any(signals: AbortSignal[]): AbortSignal }).any([parent, controller.signal]) : controller.signal
   inheritTaskControl(parent, signal)
   let elapsed = 0, last = performance.now()
   const timer = setInterval(() => {
@@ -282,7 +282,13 @@ export function parseSha256Sums(text: string): Map<string, string> {
 }
 
 /** Resolve the requested release's checksums, never a different latest version's manifest. */
-export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typeof ghFetch = ghFetch, signal?: AbortSignal): Promise<Map<string, string> | null> {
+export interface UpdateChecksumSource { repository: string; apiBase: string; downloadBase?: string; isolated?: boolean }
+/** Source is an explicit backend dependency; production callers use the configured NC source below. */
+export async function fetchSha256SumsForSource(source: UpdateChecksumSource, releaseAssetUrlHint?: string, fetcher: typeof ghFetch = ghFetch, signal?: AbortSignal): Promise<Map<string, string> | null> {
+  if(source.repository && !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(source.repository))throw new Error('Invalid official update repository')
+  const api = new URL(source.apiBase)
+  if(api.username || api.password || api.search || api.hash)throw new Error('Invalid official update API source')
+  if(api.origin !== 'https://api.github.com' && !(source.isolated === true && api.protocol === 'http:' && ['127.0.0.1','localhost','[::1]'].includes(api.hostname)))throw new Error('Invalid official update API source')
   signal?.throwIfAborted()
   const urls: string[] = []
   const expectedName = releaseAssetUrlHint?.split('/').at(-1)
@@ -292,7 +298,7 @@ export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typ
       signal?.throwIfAborted()
       const readSignal = deadline.signal
       const res = fetcher === ghFetch ? await downloadFetch(url, { signal: readSignal, headers: { 'User-Agent': 'KAMUCL-Launcher', 'accept-encoding': 'identity' } }, undefined, undefined,
-        async next => validateUpdateDownloadUrl(next, isolatedUpdateTest())) : await fetcher(url, undefined, readSignal)
+        async next => validateUpdateDownloadUrl(next, source.isolated === true)) : await fetcher(url, undefined, readSignal)
       if (!res.ok) { await res.body?.cancel().catch(() => {}); return null }
       const sums = parseSha256Sums((await readUpdateBody(res, signal)).toString('utf8'))
       return sums.size && (!expectedName || sums.has(expectedName)) ? sums : null
@@ -306,11 +312,11 @@ export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typ
     // an asset's SHA256 digest in its official release API; it is a trusted
     // fallback when the canonical checksum file cannot be reached. Never ask a
     // download mirror for both the executable and its expected checksum.
-    const prefix = `https://github.com/${GITHUB_REPO}/releases/download/`
+    const prefix = `https://github.com/${source.repository}/releases/download/`
     const match = releaseAssetUrlHint.startsWith(prefix) && /^(v\d+\.\d+\.\d+)\/([^/?#]+)$/.exec(releaseAssetUrlHint.slice(prefix.length))
     if (match) {
       try {
-        const response = await fetcher(`${apiBase()}/repos/${GITHUB_REPO}/releases/tags/${match[1]}`, undefined, signal)
+        const response = await fetcher(`${source.apiBase.replace(/\/+$/, '')}/repos/${source.repository}/releases/tags/${match[1]}`, undefined, signal)
         if (response.ok) {
           const release = JSON.parse((await readUpdateBody(response, signal)).toString('utf8')) as GhRelease
           if (release.tag_name === match[1] && !release.draft && !release.prerelease && Array.isArray(release.assets)) {
@@ -323,10 +329,10 @@ export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typ
     }
   }
   // mock/测试：下载基地址覆盖时直接从该基地址取
-  const dlBase = downloadBaseOverride()
+  const dlBase = source.downloadBase || ''
   if (dlBase) urls.push(`${dlBase}/SHA256SUMS.txt`)
   try {
-    const res = await fetcher(`${apiBase()}/repos/${GITHUB_REPO}/releases/latest`, undefined, signal)
+    const res = await fetcher(`${source.apiBase.replace(/\/+$/, '')}/repos/${source.repository}/releases/latest`, undefined, signal)
     if (res.ok) {
       const json = JSON.parse((await readUpdateBody(res, signal)).toString('utf8')) as GhRelease
       const sums = (json.assets ?? []).find((a) => a.name === 'SHA256SUMS.txt')
@@ -338,6 +344,10 @@ export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typ
     if (sums) return sums
   }
   return null
+}
+
+export async function fetchSha256Sums(releaseAssetUrlHint?: string, fetcher: typeof ghFetch = ghFetch, signal?: AbortSignal): Promise<Map<string, string> | null> {
+  return fetchSha256SumsForSource({ repository: GITHUB_REPO, apiBase: apiBase(), downloadBase: downloadBaseOverride(), isolated: isolatedUpdateTest() }, releaseAssetUrlHint, fetcher, signal)
 }
 
 /** 计算文件的 SHA256（hex 小写） */

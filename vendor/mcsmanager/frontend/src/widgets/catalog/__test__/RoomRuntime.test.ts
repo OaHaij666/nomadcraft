@@ -116,3 +116,18 @@ describe("room placement and network settings", () => {
     expect(wrapper.text()).toContain("TXT_CODE_COMPUTE_CLOSE_FIRST");
   });
 });
+
+it("persists administrative gateway settings with distinct external and internal ports",async()=>{
+ await render({...save,gateway:{enabled:true,backendPort:25566}});
+ expect(wrapper.text()).toContain("主机交接不断线");
+ await wrapper.findAll("button").find(b=>b.text().includes("TXT_CODE_COMPUTE_SAVE"))!.trigger("click");await flushPromises();
+ expect(mocks.runtime).toHaveBeenCalledWith("instance","save",{placement:save.placement,ingress:save.ingress,gateway:{enabled:true,backendPort:25566}});
+});
+it("shows a specific port conflict without claiming the configuration was saved",async()=>{
+ mocks.runtime.mockRejectedValueOnce(new Error("gateway_port_conflict"));await render({...save,gateway:{enabled:true,backendPort:25565}});
+ await wrapper.findAll("button").find(b=>b.text().includes("TXT_CODE_COMPUTE_SAVE"))!.trigger("click");await flushPromises();
+ expect(wrapper.text()).toContain("内部端口不能与网关监听端口相同");expect(wrapper.emitted("done")).toBeUndefined();
+});
+it("does not show gateway editing to a non-administrative room manager",async()=>{
+ admin.value=false;await render({...save,gateway:{enabled:true,backendPort:25566}});expect(wrapper.text()).not.toContain("主机交接不断线");
+});

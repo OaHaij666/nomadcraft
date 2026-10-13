@@ -56,6 +56,10 @@ module.exports = {
     ]
   },
   target: "node",
+  plugins: [{ apply(compiler) {
+    compiler.hooks.beforeCompile.tap("NomadNumenAdapter", () => {require("node:child_process").execFileSync(process.execPath,[path.resolve(__dirname,"../../../apps/numen-adapter/build.cjs")],{stdio:"inherit",windowsHide:true});require("node:child_process").execFileSync(process.execPath,[path.resolve(__dirname,"../../../apps/gateway/build.cjs")],{stdio:"inherit",windowsHide:true});});
+    compiler.hooks.thisCompilation.tap("NomadNumenAdapter", compilation => {compilation.hooks.processAssets.tap({name:"NomadNumenAdapter",stage:compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL},()=>{const dir=path.resolve(__dirname,"../../../apps/numen-adapter/dist"),fs=require("node:fs");const manifest=JSON.parse(fs.readFileSync(path.join(dir,"manifest.json"),"utf8"));for(const artifact of manifest.artifacts){const bytes=fs.readFileSync(path.join(dir,artifact.file));compilation.emitAsset(artifact.file,new compiler.webpack.sources.RawSource(bytes));}compilation.emitAsset("nomad-numen-adapters.json",new compiler.webpack.sources.RawSource(JSON.stringify(manifest)));const gateway=path.resolve(__dirname,"../../../apps/gateway");for(const file of ["runtime.cjs","prepare.cjs","backend.cjs","vanilla.cjs","dist/nomad-gateway.jar","dist/manifest.json",...fs.readdirSync(path.join(gateway,"dist/dependencies")).map(file=>"dist/dependencies/"+file)])compilation.emitAsset("gateway/"+file,new compiler.webpack.sources.RawSource(fs.readFileSync(path.join(gateway,file))));});});
+  }}],
   devtool: "source-map",
   optimization: {
     chunkIds: "named",
